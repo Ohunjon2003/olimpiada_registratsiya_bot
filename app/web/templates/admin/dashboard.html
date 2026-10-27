@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Bosh sahifa{% endblock %}
+{% block head %}<script src="/static/vendor/chart.min.js"></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Bosh sahifa</h1>
+    <div class="muted">Ro'yxatdan o'tish:
+      {% if reg_state == 'open' %}<span class="badge ok">ochiq</span>{% elif reg_state == 'closed' %}<span class="badge err">yopilgan</span>{% else %}<span class="badge warn">hali boshlanmagan</span>{% endif %}
+      {% if setting('registration_end') %}<span class="small">— tugash: {{ setting('registration_end')|dt }}</span>{% endif %}
+      {% if round %} · Joriy tur: <b>{{ round.name }}</b>{% endif %}
+    </div>
+  </div>
+  <div class="btns">
+    <a class="btn" href="/admin/participants/export">⬇️ Excel</a>
+    <a class="btn primary" href="/judge/enter">✍️ Ball kiritish</a>
+  </div>
+</div>
+
+{% for cid, when, err in channel_errors %}
+<div class="alert error">⚠️ Bot <b>{{ cid }}</b> kanaliga obunani tekshira olmadi ({{ when }}): <code>{{ err }}</code><br>
+  O'quvchilar to'xtab qolmasligi uchun bu kanal vaqtincha tekshirilmayapti. Botni kanalga <b>admin</b> qiling va
+  <a href="/admin/c/channels">Kanallar</a> sahifasida «Botni tekshirish»ni bosing.</div>
+{% endfor %}
+{% if channels_n == 0 %}<div class="alert warn">Kanallar qo'shilmagan — o'quvchilar obunasiz ro'yxatdan o'tadi. <a href="/admin/c/channels">Kanal qo'shish →</a></div>{% endif %}
+
+<div class="grid g4 mb">
+  <div class="card stat"><div class="v">{{ total }}</div><div class="l">Jami ro'yxatdan o'tganlar</div></div>
+  <div class="card stat"><div class="v">{{ today }}</div><div class="l">Bugun</div></div>
+  <div class="card stat"><div class="v">{{ active }}</div><div class="l">Faol ishtirokchilar</div></div>
+  <div class="card stat"><div class="v">{{ total - active }}</div><div class="l">Chetlatilganlar</div></div>
+</div>
+
+<div class="grid g2 mb">
+  <div class="card"><h3>Oxirgi 14 kun</h3><div class="chart-box"><canvas id="cDaily"></canvas></div></div>
+  <div class="card"><h3>Sinflar bo'yicha</h3><div class="chart-box"><canvas id="cGrades"></canvas></div></div>
+  <div class="card"><h3>Fanlar bo'yicha</h3><div class="chart-box"><canvas id="cSubjects"></canvas></div></div>
+  <div class="card"><h3>Eng faol maktablar</h3><div class="chart-box"><canvas id="cSchools"></canvas></div></div>
+</div>
+
+<div class="card">
+  <h3>Natijalar kiritilishi {% if round %}<span class="muted">— {{ round.name }}</span>{% endif %}</h3>
+  {% if progress %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Fan</th><th>Ishtirokchilar</th><th>Kiritilgan</th><th style="width:40%">Jarayon</th><th></th></tr></thead>
+    <tbody>
+    {% for p in progress %}
+      {% set pct = (p.entered / p.total * 100) if p.total else 0 %}
+      <tr><td><b>{{ p.subject.name }}</b> {% if p.subject.is_locked %}🔒{% endif %}</td><td>{{ p.total }}</td><td>{{ p.entered }}</td>
+        <td><div class="progress"><div style="width:{{ pct|round(1) }}%"></div></div><span class="small muted">{{ pct|round(1) }}%</span></td>
+        <td class="right"><a class="btn sm" href="/judge/enter?subject_id={{ p.subject.id }}">Kiritish</a> <a class="btn sm" href="/admin/ranking?target=s:{{ p.subject.id }}">Reyting</a></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="empty">Hali fan tanlagan ishtirokchilar yo'q.</div>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  var D = {{ chart|tojson }};
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = '#667085';
+  var blue = '#2453d6', soft = 'rgba(36,83,214,.15)';
+  function bar(id, labels, data, horizontal) {
+    new Chart(document.getElementById(id), {type: 'bar',
+      data: {labels: labels, datasets: [{data: data, backgroundColor: blue, borderRadius: 4, maxBarThickness: 36}]},
+      options: {indexAxis: horizontal ? 'y' : 'x', maintainAspectRatio: false, plugins: {legend: {display: false}},
+        scales: {x: {grid: {display: !horizontal}, ticks: {precision: 0}}, y: {grid: {display: horizontal ? false : true}, ticks: {precision: 0}}}}});
+  }
+  new Chart(document.getElementById('cDaily'), {type: 'line',
+    data: {labels: D.days, datasets: [{data: D.daily, borderColor: blue, backgroundColor: soft, fill: true, tension: .3, pointRadius: 3}]},
+    options: {maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}});
+  bar('cGrades', D.grades.map(r => r[0]), D.grades.map(r => r[1]));
+  bar('cSubjects', D.subjects.map(r => r[0]), D.subjects.map(r => r[1]));
+  bar('cSchools', D.schools.map(r => r[0]), D.schools.map(r => r[1]), true);
+</script>
+{% endblock %}

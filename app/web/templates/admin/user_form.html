@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import errors as show_errors %}
+{% block title %}Foydalanuvchi{% endblock %}
+{% block crumbs %}<a href="/admin/users">Hakamlar</a> / {{ obj.username if obj else 'Yangi' }}{% endblock %}
+{% block content %}
+{% set f = form if form else None %}
+<div class="page-head"><h1>{{ obj.username if obj else 'Yangi hakam' }}</h1></div>
+{{ show_errors(errors) }}
+<form method="post" action="/admin/users/save" class="card form-narrow" style="max-width:560px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if obj %}<input type="hidden" name="id" value="{{ obj.id }}">{% endif %}
+  <div class="field"><label>Login *</label><input type="text" name="username" value="{{ f.get('username') if f else (obj.username if obj else '') }}" required autocomplete="off"></div>
+  <div class="field"><label>F.I.O</label><input type="text" name="full_name" value="{{ f.get('full_name') if f else (obj.full_name if obj else '') }}"></div>
+  <div class="field"><label>{{ 'Yangi parol' if obj else 'Parol *' }}</label>
+    <div class="btns"><input type="text" name="password" id="pw" autocomplete="new-password" style="flex:1" {% if not obj %}required{% endif %}><button type="button" class="btn" onclick="genPw()">🎲 Yaratish</button></div>
+    <div class="help">{{ "Bo'sh qoldirilsa parol o'zgarmaydi. " if obj }}Kamida 8 belgi, harf va raqam aralash. Saqlashdan oldin parolni nusxalab oling.</div></div>
+  <div class="field"><label>Rol</label>
+    {% set role = f.get('role') if f else (obj.role if obj else 'judge') %}
+    <select name="role"><option value="judge" {% if role == 'judge' %}selected{% endif %}>Hakam — faqat ball kiritadi</option><option value="admin" {% if role == 'admin' %}selected{% endif %}>Admin — hamma narsaga ruxsat</option></select></div>
+  <div class="field"><label>Biriktirilgan fanlar</label>
+    {% set sel = (f.getlist('subjects')|map('int')|list) if f else (obj.subjects|map(attribute='id')|list if obj else []) %}
+    <div class="multi-box">{% for s in subjects %}<label class="check"><input type="checkbox" name="subjects" value="{{ s.id }}" {% if s.id in sel %}checked{% endif %}> {{ s.name }}</label>{% endfor %}</div>
+    <div class="help">Hech biri tanlanmasa — barcha fanlar.</div></div>
+  <label class="check field"><input type="checkbox" name="is_active" {% if (f and f.get('is_active')) or (not f and (not obj or obj.is_active)) %}checked{% endif %}> Faol (tizimga kira oladi)</label>
+  <div class="btns"><button class="btn primary">💾 Saqlash</button><a class="btn" href="/admin/users">Bekor qilish</a></div>
+</form>
+<script>
+  function genPw() {
+    var a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '';
+    var r = new Uint32Array(10); crypto.getRandomValues(r);
+    for (var i = 0; i < 10; i++) s += a[r[i] % a.length];
+    if (!/\d/.test(s)) s = s.slice(0, 9) + '7';
+    document.getElementById('pw').value = s;
+  }
+</script>
+{% endblock %}

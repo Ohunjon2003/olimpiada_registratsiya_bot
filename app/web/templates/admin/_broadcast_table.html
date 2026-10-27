@@ -1,0 +1,20 @@
+<div id="bc-table" {% if any_active %}hx-get="/admin/broadcasts/table" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+<div class="table-wrap"><table>
+  <thead><tr><th>#</th><th>Turi</th><th>Matn</th><th>Filtr</th><th>Vaqti</th><th>Holat</th><th style="width:180px">Jarayon</th><th></th></tr></thead>
+  <tbody>
+  {% for b in items %}
+  {% set done = b.sent + b.failed %}
+  <tr>
+    <td>{{ b.id }}</td>
+    <td><span class="badge blue">{{ kinds[b.kind] }}</span></td>
+    <td class="small">{{ (b.text or '—')[:80] }}{% if b.photo_path %} 🖼{% endif %}</td>
+    <td class="small">{% set fl = loads(b.filters_json or '{}') %}{% set names = {'school_id': 'maktab #', 'grade_id': 'sinf #', 'subject_id': 'fan #', 'lang': 'til: ', 'status': 'holat: ', 'attendance': ''} %}{% set att = {'came': 'kelganlar', 'absent': 'kelmaganlar', 'unmarked': 'belgilanmaganlar'} %}{% set fl2 = fl.items()|rejectattr(0, 'equalto', 'att_round')|list %}{% if fl2 %}{% for k, v in fl2 %}{{ names.get(k, k ~ '=') }}{{ att.get(v, v) if k == 'attendance' else v }}{{ ', ' if not loop.last }}{% endfor %}{% else %}hammaga{% endif %}</td>
+    <td class="small nowrap">{{ b.scheduled_at|dt }}</td>
+    <td>{% if b.status == 'done' %}<span class="badge ok">yakunlandi</span>{% elif b.status == 'sending' %}<span class="badge blue">yuborilmoqda…</span>{% elif b.status == 'scheduled' %}<span class="badge warn">navbatda</span>{% else %}<span class="badge">to'xtatilgan</span>{% endif %}</td>
+    <td>{% if b.total %}<div class="progress"><div style="width:{{ (done / b.total * 100)|round(1) if b.total else 0 }}%"></div></div>{% endif %}
+      <div class="small">✅ {{ b.sent }} · ❌ {{ b.failed }}{% if b.total %} / {{ b.total }}{% endif %}</div></td>
+    <td class="right">{% if b.status in ['scheduled', 'sending'] %}<form method="post" action="/admin/broadcasts/{{ b.id }}/cancel" class="inline" data-confirm="To'xtatilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">To'xtatish</button></form>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="empty">Hali xabar yuborilmagan</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager %}
+{% block title %}Xabar yuborish{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Xabar yuborish</h1><div class="muted">Bot orqali ishtirokchilarga xabar, eslatma, natija yoki sertifikat yuborish. Vaqt belgilansa — o'sha paytda avtomatik yuboriladi.</div></div></div>
+{% if not bot_ok %}<div class="alert error">Bot ishlamayapti (BOT_TOKEN berilmagan) — xabarlar yuborilmaydi.</div>{% endif %}
+<form method="post" action="/admin/broadcasts/create" enctype="multipart/form-data" class="card mb" id="bc-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="grid g2">
+    <div>
+      <div class="field"><label>Turi</label>
+        <select name="kind" id="bc-kind">
+          <option value="message">✉️ Oddiy xabar / eslatma</option>
+          <option value="results">📊 Har kimga o'z natijasi</option>
+          <option value="certificates">🎓 Har kimga o'z sertifikati</option>
+        </select></div>
+      <div class="field" data-k="message"><label>Matn (lotin)</label><textarea name="text" rows="6" placeholder="Hurmatli ishtirokchi! Olimpiada ertaga soat 9:00 da 5-maktabda bo'lib o'tadi."></textarea></div>
+      <div class="field" data-k="message"><label>Matn (kirill)</label><textarea name="text_cyr" rows="4" placeholder="Bo'sh qoldirilsa avtomatik o'giriladi"></textarea><div class="help">Har bir o'quvchiga o'zi tanlagan tilda boradi.</div></div>
+      <div class="field" data-k="message"><label>Rasm (ixtiyoriy)</label><input type="file" name="photo" accept="image/*"></div>
+    </div>
+    <div>
+      <div class="field"><label>Kimlarga</label>
+        <div class="grid g2" hx-post="/admin/broadcasts/count" hx-trigger="change, load" hx-include="#bc-form" hx-target="#bc-count">
+          <select name="school_id"><option value="">Barcha maktablar</option>{% for s in schools %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+          <select name="grade_id"><option value="">Barcha sinflar</option>{% for g in grades %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</select>
+          <select name="subject_id"><option value="">Barcha fanlar</option>{% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+          <select name="lang"><option value="">Barcha tillar</option><option value="lat">Lotin</option><option value="cyr">Kirill</option></select>
+          <select name="attendance"><option value="">Davomatdan qat'i nazar</option><option value="came">✅ Kelganlar</option><option value="absent">❌ Kelmaganlar</option><option value="unmarked">❔ Belgilanmaganlar</option></select>
+        </div>
+        <div class="help" id="bc-count">…</div>
+        <div class="help">Botni bloklagan va chetlatilgan o'quvchilarga yuborilmaydi.</div>
+      </div>
+      <div class="field"><label>Yuborish vaqti</label><input type="datetime-local" name="scheduled_at"><div class="help">Bo'sh — darhol. Masalan, olimpiada kuni ertalabga eslatma qo'yish mumkin.</div></div>
+      <button class="btn primary">📨 Yuborish</button>
+    </div>
+  </div>
+</form>
+<h2>Yuborilgan xabarlar</h2>
+{% include "admin/_broadcast_table.html" %}
+{{ pager(page) }}
+{% endblock %}
+{% block scripts %}
+<script>
+  function syncKind() {
+    var k = document.getElementById('bc-kind').value;
+    document.querySelectorAll('[data-k]').forEach(function (el) { el.classList.toggle('hidden', el.getAttribute('data-k') !== k); });
+  }
+  document.getElementById('bc-kind').addEventListener('change', syncKind); syncKind();
+</script>
+{% endblock %}

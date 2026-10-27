@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "macros.html" import select %}
+{% block title %}Davomat{% endblock %}
+{% block crumbs %}Davomat · {{ round.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🙋 Davomat — {{ round.name }}</h1>
+    <div class="muted">Familiya, ism yoki ID ning birinchi harflarini yozing — ro'yxat darhol chiqadi. Bitta o'quvchi qolsa, <b>Enter</b> uni «Keldi» deb belgilaydi.</div></div>
+  {% if user.is_admin and rounds|length > 1 %}
+  <form method="get" class="inline">
+    <select name="round_id" onchange="this.form.submit()">
+      {% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}{% if r.is_current %} (joriy){% endif %}</option>{% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% with oob = false %}{% include "attendance/_counts.html" %}{% endwith %}
+
+<form id="att-filters" class="card mb att-filters" onsubmit="return false"
+      hx-get="/attendance/rows" hx-target="#att-body" hx-swap="innerHTML"
+      hx-trigger="input changed delay:180ms from:#att-q, search from:#att-q, change">
+  <input type="hidden" name="round_id" value="{{ round.id }}">
+  <input type="search" id="att-q" name="q" value="{{ params.get('q', '') }}" class="att-q" autocomplete="off" autofocus
+         placeholder="🔎 Familiya, ism, ID yoki telefon — yozishni boshlang...">
+  <div class="chips att-grades">
+    <label class="chip-radio"><input type="radio" name="grade_id" value="" {% if not params.get('grade_id') %}checked{% endif %}><span>Barcha sinflar</span></label>
+    {% for g in grades %}<label class="chip-radio"><input type="radio" name="grade_id" value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}checked{% endif %}><span>{{ g.name }}-sinf</span></label>{% endfor %}
+  </div>
+  <div class="filters">
+    {{ select('school_id', schools, params.get('school_id', ''), empty='Barcha maktablar', label='Maktab') }}
+    {{ select('subject_id', subjects, params.get('subject_id', ''), empty='Barcha fanlar', label='Fan') }}
+    <div><label class="small">Holat</label>
+      <select name="attendance" id="att-status">
+        <option value="">Barchasi</option>
+        {% for k, l in [('unmarked', '❔ Belgilanmaganlar'), ('came', '✅ Kelganlar'), ('absent', '❌ Kelmaganlar')] %}
+        <option value="{{ k }}" {% if params.get('attendance') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    <div class="btns"><a class="btn" href="/attendance?round_id={{ round.id }}">Tozalash</a>
+      {% if user.is_admin %}<a class="btn" href="/admin/participants?attendance=absent&att_round={{ round.id }}">📋 Kelmaganlar ro'yxati</a>{% endif %}</div>
+  </div>
+</form>
+
+<div class="table-wrap"><table class="att-table">
+  <thead><tr><th>ID</th><th>Familiya Ism</th><th class="hide-sm">Maktab</th><th class="hide-sm">Sinf</th><th class="hide-sm">Fanlar</th><th></th></tr></thead>
+  <tbody id="att-body">{% include "attendance/_rows.html" %}</tbody>
+</table></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const q = document.getElementById("att-q"), form = document.getElementById("att-filters");
+  // Enter: ro'yxatda bitta o'quvchi qolgan bo'lsa — «Keldi» deb belgilaymiz va qidiruvni tozalaymiz
+  q.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const rows = document.querySelectorAll("#att-body tr.att-row");
+    if (rows.length === 1) {
+      const btn = rows[0].querySelector(".att-yes");
+      if (!btn.classList.contains("on")) btn.click();
+      setTimeout(() => { q.select(); }, 50);
+    }
+  });
+  // Hisoblagich tugmalari — holat filtri
+  document.addEventListener("click", e => {
+    const b = e.target.closest(".att-stat");
+    if (!b) return;
+    document.getElementById("att-status").value = b.dataset.att;
+    htmx.trigger(form, "change");
+  });
+  // Har 20 soniyada hisoblagich va ro'yxatni yangilash (boshqa odamlar ham belgilayotgan bo'lsa)
+  setInterval(() => {
+    if (document.activeElement === q && q.value) return; // yozayotgan paytda xalaqit bermaymiz
+    if (!document.hidden) htmx.trigger(form, "change");
+  }, 20000);
+})();
+</script>
+{% endblock %}

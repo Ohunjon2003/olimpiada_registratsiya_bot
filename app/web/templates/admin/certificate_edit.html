@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{{ tpl.name }}{% endblock %}
+{% block crumbs %}<a href="/admin/certificates">Sertifikatlar</a> / {{ tpl.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ tpl.name }}</h1><div class="muted">Matnni sichqoncha bilan suring. Tanlangan matnni o'ng paneldan tahrirlang. Klaviatura o'qlari bilan aniq siljiting.</div></div>
+  <div class="btns">
+    <a class="btn" href="/admin/certificates/{{ tpl.id }}/sample.pdf">⬇️ Namuna PDF</a>
+    <a class="btn" href="/admin/certificates/{{ tpl.id }}/zip">⬇️ Barchasi (ZIP)</a>
+  </div>
+</div>
+
+<div class="designer">
+  <div>
+    <div class="canvas" id="canvas"><img id="bg" src="/admin/certificates/{{ tpl.id }}/background?v={{ tpl.width }}{{ tpl.height }}{{ tpl.background_path|length }}" alt="fon"></div>
+    <div class="btns mt">
+      <button class="btn" type="button" onclick="addField()">＋ Matn qo'shish</button>
+      <button class="btn primary" type="button" onclick="saveFields()" id="save-btn">💾 Dizaynni saqlash</button>
+      <button class="btn" type="button" onclick="showPreview()">👁 Haqiqiy ko'rinish</button>
+      <span id="save-status" class="muted small"></span>
+    </div>
+    <div class="card mt hidden" id="preview-box"><h3>Haqiqiy ko'rinish (namuna ma'lumot bilan)</h3><img id="preview" style="width:100%;border:1px solid var(--line)"></div>
+  </div>
+
+  <div>
+    <div class="card" id="props">
+      <h3>Tanlangan matn</h3>
+      <div id="no-sel" class="muted small">Matnni tanlash uchun ustiga bosing.</div>
+      <div id="sel-form" class="hidden">
+        <div class="field"><label>Matn</label><textarea id="p-text" rows="2"></textarea>
+          <div class="chips mt">{% for ph, d in placeholders.items() %}<button type="button" class="chip" title="{{ d }}" onclick="insertPh('{{ ph }}')">{{ ph }}</button>{% endfor %}</div></div>
+        <div class="grid g2">
+          <div class="field"><label>Shrift</label><select id="p-font">
+            <option value="sans">Oddiy</option><option value="sans-bold">Oddiy qalin</option>
+            <option value="serif">Klassik</option><option value="serif-bold">Klassik qalin</option></select></div>
+          <div class="field"><label>Rang</label><input type="color" id="p-color"></div>
+          <div class="field"><label>O'lcham</label><input type="number" id="p-size" step="0.1" min="0.3" max="20"></div>
+          <div class="field"><label>Tekislash</label><select id="p-align"><option value="left">Chap</option><option value="center">Markaz</option><option value="right">O'ng</option></select></div>
+          <div class="field"><label>Maks. kenglik %</label><input type="number" id="p-mw" step="1" min="0" max="100"></div>
+          <div class="field"><label>X %</label><input type="number" id="p-x" step="0.1"></div>
+          <div class="field"><label>Y %</label><input type="number" id="p-y" step="0.1"></div>
+        </div>
+        <div class="help mb">Maks. kenglik: uzun ism sig'masa shrift avtomatik kichrayadi (0 — cheklanmagan).</div>
+        <div class="btns"><button class="btn sm" type="button" onclick="centerX()">↔ Markazga</button><button class="btn sm" type="button" onclick="dupField()">⧉ Nusxa</button><button class="btn sm danger" type="button" onclick="delField()">🗑 O'chirish</button></div>
+      </div>
+    </div>
+
+    <form method="post" action="/admin/certificates/{{ tpl.id }}/settings" enctype="multipart/form-data" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h3>Shablon sozlamalari</h3>
+      <div class="field"><label>Nomi</label><input type="text" name="name" value="{{ tpl.name }}" required></div>
+      <label class="check field"><input type="checkbox" name="is_active" {% if tpl.is_active %}checked{% endif %}> Faol</label>
+      <div class="field"><label>Kimlarga beriladi</label><select name="rule" id="rule">
+        <option value="all" {% if tpl.rule == 'all' %}selected{% endif %}>Natijasi bor barcha ishtirokchilar</option>
+        <option value="top" {% if tpl.rule == 'top' %}selected{% endif %}>G'oliblar (o'rin bo'yicha)</option>
+        <option value="percent" {% if tpl.rule == 'percent' %}selected{% endif %}>Foiz bo'yicha</option></select></div>
+      <div class="field" data-rule="top"><label>Nechanchi o'ringacha</label><input type="number" name="top_n" min="1" value="{{ tpl.top_n }}"></div>
+      <div class="field" data-rule="percent"><label>Minimal foiz</label><input type="number" name="min_percent" step="any" min="0" max="100" value="{{ tpl.min_percent|num }}"></div>
+      <div class="field"><label>Reyting turi</label><select name="scope" id="scope"><option value="subject" {% if tpl.scope == 'subject' %}selected{% endif %}>Fan bo'yicha</option><option value="block" {% if tpl.scope == 'block' %}selected{% endif %}>Blok bo'yicha</option></select></div>
+      <div class="field" data-scope="subject"><label>Fan</label><select name="subject_id"><option value="">Barcha fanlar</option>{% for s in subjects %}<option value="{{ s.id }}" {% if tpl.subject_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+      <div class="field" data-scope="block"><label>Blok</label><select name="block_id"><option value="">Barcha bloklar</option>{% for b in blocks %}<option value="{{ b.id }}" {% if tpl.block_id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Tur</label><select name="round_id"><option value="">Joriy tur</option>{% for r in rounds %}<option value="{{ r.id }}" {% if tpl.round_id == r.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Fon rasmi (PNG/JPG)</label><input type="file" name="background" accept="image/png,image/jpeg">
+        <div class="help">A4 albom uchun tavsiya: 3508×2480 yoki 1754×1240 px. Hozir: {{ tpl.width }}×{{ tpl.height }}.</div>
+        {% if tpl.background_path %}<label class="check mt"><input type="checkbox" name="reset_background"> Standart fonga qaytarish</label>{% endif %}</div>
+      <div class="help mb">O'rin «Umumiy sozlamalar»dagi tartibda (sinf kesimida yoki umumiy) hisoblanadi.</div>
+      <div class="btns"><button class="btn primary">Saqlash</button></div>
+    </form>
+    <form method="post" action="/admin/certificates/{{ tpl.id }}/delete" class="card" data-confirm="Shablon o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">🗑 Shablonni o'chirish</button></form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var FIELDS = {{ fields|tojson }};
+  var SAMPLE = {"{full_name}": "Aliyev Aziz", "{first_name}": "Aziz", "{last_name}": "Aliyev", "{school}": "5-maktab",
+    "{grade}": "9", "{subject}": "Matematika", "{place}": "1", "{score}": "57", "{max_score}": "60", "{percent}": "95",
+    "{round}": "1-tur", "{code}": "0017", "{olympiad}": {{ setting('olympiad_name')|tojson }}, "{date}": new Date().toLocaleDateString('ru-RU')};
+  var FONT = {"sans": ["DSans", 400], "sans-bold": ["DSans", 700], "serif": ["DSerif", 400], "serif-bold": ["DSerif", 700]};
+  var canvas = document.getElementById('canvas'), bg = document.getElementById('bg');
+  var sel = -1, dirty = false;
+
+  function sample(t) { return t.replace(/\{[a-z_]+\}/g, function (m) { return SAMPLE[m] !== undefined ? SAMPLE[m] : m; }); }
+  function W() { return canvas.clientWidth; }
+  function H() { return canvas.clientHeight; }
+
+  function draw() {
+    canvas.querySelectorAll('.tf').forEach(function (e) { e.remove(); });
+    FIELDS.forEach(function (f, i) {
+      var el = document.createElement('div');
+      el.className = 'tf' + (i === sel ? ' sel' : '');
+      el.textContent = sample(f.text) || '·';
+      var font = FONT[f.font] || FONT.sans;
+      var size = f.size * W() / 100;
+      el.style.fontFamily = font[0]; el.style.fontWeight = font[1];
+      el.style.fontSize = size + 'px'; el.style.color = f.color;
+      el.style.left = (f.x * W() / 100) + 'px'; el.style.top = (f.y * H() / 100) + 'px';
+      var tx = f.align === 'left' ? '0' : (f.align === 'right' ? '-100%' : '-50%');
+      el.style.transform = 'translate(' + tx + ', -50%)';
+      canvas.appendChild(el);
+      // Juda uzun bo'lsa — PDFdagidek kichraytiramiz
+      if (f.max_width > 0) {
+        var maxPx = f.max_width * W() / 100, s = size;
+        while (s > 8 && el.scrollWidth > maxPx) { s *= 0.94; el.style.fontSize = s + 'px'; }
+      }
+      el.addEventListener('pointerdown', function (ev) { startDrag(ev, i, el); });
+    });
+  }
+
+  function select(i) { sel = i; draw(); fillProps(); }
+  function fillProps() {
+    var has = sel >= 0 && FIELDS[sel];
+    document.getElementById('no-sel').classList.toggle('hidden', has);
+    document.getElementById('sel-form').classList.toggle('hidden', !has);
+    if (!has) return;
+    var f = FIELDS[sel];
+    document.getElementById('p-text').value = f.text;
+    document.getElementById('p-font').value = f.font;
+    document.getElementById('p-color').value = f.color.length === 4 ? '#' + f.color[1] + f.color[1] + f.color[2] + f.color[2] + f.color[3] + f.color[3] : f.color;
+    document.getElementById('p-size').value = f.size;
+    document.getElementById('p-align').value = f.align;
+    document.getElementById('p-mw').value = f.max_width || 0;
+    document.getElementById('p-x').value = Math.round(f.x * 10) / 10;
+    document.getElementById('p-y').value = Math.round(f.y * 10) / 10;
+  }
+  function markDirty() { dirty = true; document.getElementById('save-status').textContent = '● saqlanmagan o\'zgarishlar'; }
+
+  // Xususiyatlar paneli
+  [['p-text', 'text'], ['p-font', 'font'], ['p-color', 'color'], ['p-size', 'size', 1], ['p-align', 'align'],
+   ['p-mw', 'max_width', 1], ['p-x', 'x', 1], ['p-y', 'y', 1]].forEach(function (d) {
+    document.getElementById(d[0]).addEventListener('input', function () {
+      if (sel < 0) return;
+      var v = this.value;
+      if (d[2]) { v = parseFloat(v); if (isNaN(v)) return; }
+      FIELDS[sel][d[1]] = v; draw(); markDirty();
+    });
+  });
+
+  // Sichqoncha bilan surish
+  function startDrag(ev, i, el) {
+    ev.preventDefault();
+    if (sel !== i) { select(i); el = canvas.querySelectorAll('.tf')[i]; }
+    var sx = ev.clientX, sy = ev.clientY, fx = FIELDS[i].x, fy = FIELDS[i].y;
+    function move(e) {
+      FIELDS[i].x = Math.max(0, Math.min(100, fx + (e.clientX - sx) / W() * 100));
+      FIELDS[i].y = Math.max(0, Math.min(100, fy + (e.clientY - sy) / H() * 100));
+      el.style.left = (FIELDS[i].x * W() / 100) + 'px'; el.style.top = (FIELDS[i].y * H() / 100) + 'px';
+    }
+    function up() { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); fillProps(); markDirty(); }
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+  }
+  canvas.addEventListener('pointerdown', function (e) { if (e.target === canvas || e.target === bg) select(-1); });
+  document.addEventListener('keydown', function (e) {
+    if (sel < 0 || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    var step = e.shiftKey ? 1 : 0.2, f = FIELDS[sel];
+    if (e.key === 'ArrowLeft') f.x -= step; else if (e.key === 'ArrowRight') f.x += step;
+    else if (e.key === 'ArrowUp') f.y -= step; else if (e.key === 'ArrowDown') f.y += step;
+    else if (e.key === 'Delete') { delField(); return; } else return;
+    e.preventDefault(); draw(); fillProps(); markDirty();
+  });
+
+  window.addField = function () {
+    FIELDS.push({text: 'Yangi matn', x: 50, y: 50, size: 2.5, color: '#111827', align: 'center', font: 'sans', max_width: 0});
+    select(FIELDS.length - 1); markDirty();
+  };
+  window.dupField = function () { if (sel < 0) return; var c = JSON.parse(JSON.stringify(FIELDS[sel])); c.y += 5; FIELDS.push(c); select(FIELDS.length - 1); markDirty(); };
+  window.delField = function () { if (sel < 0) return; FIELDS.splice(sel, 1); select(-1); markDirty(); };
+  window.centerX = function () { if (sel < 0) return; FIELDS[sel].x = 50; FIELDS[sel].align = 'center'; draw(); fillProps(); markDirty(); };
+  window.insertPh = function (ph) {
+    var ta = document.getElementById('p-text'), s = ta.selectionStart || ta.value.length;
+    ta.value = ta.value.slice(0, s) + ph + ta.value.slice(ta.selectionEnd || s);
+    ta.dispatchEvent(new Event('input')); ta.focus();
+  };
+  window.saveFields = function () {
+    var st = document.getElementById('save-status');
+    st.textContent = 'Saqlanmoqda…';
+    return fetch('/admin/certificates/{{ tpl.id }}/fields', {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': {{ csrf|tojson }}}, body: JSON.stringify(FIELDS)})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); dirty = false; st.textContent = '✓ Saqlandi'; })
+      .catch(function (e) { st.textContent = '⚠️ Saqlab bo\'lmadi: ' + e.message; });
+  };
+  window.showPreview = function () {
+    saveFields().then(function () {
+      document.getElementById('preview-box').classList.remove('hidden');
+      document.getElementById('preview').src = '/admin/certificates/{{ tpl.id }}/preview.png?t=' + Date.now();
+    });
+  };
+  window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('resize', draw);
+  if (bg.complete) draw(); else bg.addEventListener('load', draw);
+  document.fonts && document.fonts.ready.then(draw);
+
+  // Sozlamalar formasi: kerakli maydonlarni ko'rsatish
+  function sync() {
+    var r = document.getElementById('rule').value, s = document.getElementById('scope').value;
+    document.querySelectorAll('[data-rule]').forEach(function (e) { e.classList.toggle('hidden', e.getAttribute('data-rule') !== r); });
+    document.querySelectorAll('[data-scope]').forEach(function (e) { e.classList.toggle('hidden', e.getAttribute('data-scope') !== s); });
+  }
+  document.getElementById('rule').addEventListener('change', sync);
+  document.getElementById('scope').addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

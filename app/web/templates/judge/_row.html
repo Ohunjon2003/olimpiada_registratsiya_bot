@@ -1,0 +1,40 @@
+{# Ball kiritish jadvalining bitta qatori (HTMX shu qatorni almashtiradi) #}
+{% set r = result %}
+<tr id="row-{{ p.id }}" class="{{ state }}{% if state == 'saved' %} flash{% endif %}{% if r and state != 'error' %} saved{% endif %}"
+    hx-post="/judge/result" hx-trigger="save" hx-include="this" hx-target="this" hx-swap="outerHTML">
+  <td><b>{{ p.code }}</b></td>
+  {% if names %}<td>{{ p.last_name }} {{ p.first_name }}<div class="small muted">{{ p.school.name }}</div></td>{% endif %}
+  <td>{{ p.grade.name }}</td>
+  <td>
+    <input type="hidden" name="participant_id" value="{{ p.id }}">
+    <input type="hidden" name="subject_id" value="{{ subject.id }}">
+    <input type="hidden" name="round_id" value="{{ round.id }}">
+    {% if subject.scoring_mode == 'groups' %}
+      <div class="ginputs">
+      {% for g in subject.groups %}
+        <div class="gi"><input class="score" type="number" inputmode="numeric" min="0" max="{{ g.question_count }}" name="g{{ g.id }}"
+            value="{{ values.get('g' ~ g.id, '') }}" {% if locked %}disabled{% endif %} title="{{ g.name }}: 0–{{ g.question_count }}">
+          <small>{{ g.name }} /{{ g.question_count }}</small></div>
+      {% endfor %}
+      </div>
+    {% elif subject.scoring_mode == 'manual' %}
+      <input class="score" type="number" inputmode="decimal" step="any" min="0" max="{{ subject.max_score }}" name="score"
+             value="{{ values.get('score', '')|num if values.get('score', '') != '' else '' }}" {% if locked %}disabled{% endif %}>
+      <span class="of">/ {{ subject.max_score|num }}</span>
+    {% else %}
+      <input class="score" type="number" inputmode="numeric" min="0" max="{{ subject.total_questions }}" name="correct"
+             value="{{ values.get('correct', '') }}" {% if locked %}disabled{% endif %}>
+      <span class="of">/ {{ subject.total_questions }}</span>
+    {% endif %}
+    {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+  </td>
+  <td class="nowrap">{% if r %}<b>{{ r.score|num }}</b> <span class="muted">/ {{ r.max_score|num }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+  <td class="pct">{% if r %}{{ r.percent|num }}%{% else %}<span class="muted">—</span>{% endif %}</td>
+  <td class="right nowrap">
+    {% if not locked %}
+      <button type="button" class="btn sm primary" onclick="saveRow(this)">Saqlash</button>
+      {% if r %}<button type="button" class="btn sm danger" hx-post="/judge/result/clear" hx-include="closest tr" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Natija o'chirilsinmi?" title="O'chirish">✕</button>{% endif %}
+    {% else %}🔒{% endif %}
+    {% if r and state != 'error' %}<div class="small muted">{{ '✓ saqlandi ' if state == 'saved' }}{{ r.updated_at|dt('%H:%M') }}</div>{% endif %}
+  </td>
+</tr>

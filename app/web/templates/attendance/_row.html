@@ -1,0 +1,17 @@
+{# Davomat jadvalining bitta qatori. Tugma qayta bosilsa — belgi olib tashlanadi #}
+<tr id="att-{{ p.id }}" class="att-row {{ 'came' if st == true else ('absent' if st == false else '') }}">
+  <td><b>{{ p.code }}</b></td>
+  <td class="att-name">{{ p.last_name }} {{ p.first_name }}<div class="small muted mobile-only">{{ p.school.name }} · {{ p.grade.name }}-sinf</div></td>
+  <td class="hide-sm">{{ p.school.name }}</td>
+  <td class="hide-sm">{{ p.grade.name }}</td>
+  <td class="small hide-sm">{{ p.subjects|map(attribute='name')|join(', ') }}</td>
+  <td class="att-btns">
+    <button class="btn att-yes {{ 'on' if st == true }}" hx-post="/attendance/mark" hx-target="closest tr" hx-swap="outerHTML"
+            hx-vals='{"participant_id": "{{ p.id }}", "round_id": "{{ round.id }}", "value": "{{ '' if st == true else '1' }}"}'
+            title="{{ 'Belgini olib tashlash' if st == true else 'Keldi' }}">✅ Keldi</button>
+    <button class="btn att-no {{ 'on' if st == false }}" hx-post="/attendance/mark" hx-target="closest tr" hx-swap="outerHTML"
+            hx-vals='{"participant_id": "{{ p.id }}", "round_id": "{{ round.id }}", "value": "{{ '' if st == false else '0' }}"}'
+            title="{{ 'Belgini olib tashlash' if st == false else 'Kelmadi' }}">❌ Kelmadi</button>
+  </td>
+</tr>
+{% if oob %}{% include "attendance/_counts.html" %}{% endif %}

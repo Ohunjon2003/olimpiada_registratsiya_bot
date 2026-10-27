@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "macros.html" import errors as show_errors %}
+{% block title %}{{ res.title }}{% endblock %}
+{% block crumbs %}Sozlash / <a href="/admin/c/{{ res.key }}">{{ res.title }}</a> / {{ 'Tahrirlash' if obj else 'Yangi' }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ res.singular|capitalize }}{% if obj %}: {{ obj.name if obj.name is defined else (obj.title if obj.title is defined else ('#' ~ obj.id)) }}{% else %} — yangi{% endif %}</h1></div>
+{{ show_errors(errors) }}
+<form method="post" action="/admin/c/{{ res.key }}/save" enctype="multipart/form-data" class="card form-narrow" id="crud-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if obj %}<input type="hidden" name="id" value="{{ obj.id }}">{% endif %}
+  {% for f in res.fields %}
+  {% set v = values.get(f.name) %}
+  <div class="field" {% if f.group %}data-group="{{ f.group }}"{% endif %}>
+    {% if f.type == 'bool' %}
+      <label class="check"><input type="checkbox" name="{{ f.name }}" {% if v %}checked{% endif %}> {{ f.label }}</label>
+    {% else %}
+      <label>{{ f.label }}{% if f.required %} <span style="color:var(--err)">*</span>{% endif %}</label>
+      {% if f.type == 'textarea' %}
+        <textarea name="{{ f.name }}" rows="{{ f.rows }}" placeholder="{{ f.placeholder }}">{{ v or '' }}</textarea>
+      {% elif f.type == 'select' %}
+        <select name="{{ f.name }}" id="f_{{ f.name }}">
+          {% for val, lab in options[f.name] %}<option value="{{ val }}" {% if v|string == val|string %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+      {% elif f.type == 'multiselect' %}
+        <div class="multi-box">
+          {% for val, lab in options[f.name] %}
+            <label class="check"><input type="checkbox" name="{{ f.name }}" value="{{ val }}" {% if val in (v or []) %}checked{% endif %}> {{ lab }}</label>
+          {% else %}<span class="muted">Ro'yxat bo'sh</span>{% endfor %}
+        </div>
+      {% elif f.type == 'file' %}
+        {% if obj and obj.file_path %}
+          <div class="mb small">Joriy fayl: <b>{{ obj.file_name }}</b>
+            <label class="check" style="display:inline-flex;margin-left:12px"><input type="checkbox" name="remove_file"> faylni o'chirish</label></div>
+        {% endif %}
+        <input type="file" name="{{ f.name }}">
+      {% elif f.type in ['int', 'float'] %}
+        <input type="number" name="{{ f.name }}" value="{{ '' if v is none else (v|num) }}" step="{{ '1' if f.type == 'int' else 'any' }}" placeholder="{{ f.placeholder }}">
+      {% else %}
+        <input type="{{ 'url' if f.type == 'url' else 'text' }}" name="{{ f.name }}" value="{{ v or '' }}" placeholder="{{ f.placeholder }}" {% if f.required %}required{% endif %}>
+      {% endif %}
+    {% endif %}
+    {% if f.help %}<div class="help">{{ f.help }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if res.extra_template %}{% include res.extra_template %}{% endif %}
+  <div class="btns mt">
+    <button class="btn primary">💾 Saqlash</button>
+    <a class="btn" href="/admin/c/{{ res.key }}">Bekor qilish</a>
+  </div>
+</form>
+{% endblock %}

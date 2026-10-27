@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Bot matnlari{% endblock %}
+{% block crumbs %}Sozlash / Bot matnlari{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>💬 Bot matnlari</h1>
+    <div class="muted">Botdagi barcha savollar, namunalar, tugmalar va stikerlar. O'zgarishlar botda darhol kuchga kiradi.</div>
+  </div>
+</div>
+
+<div class="alert info">
+  💡 Istalgan joyga emoji qo'shishingiz mumkin: matn maydoniga bosing va pastki o'ng burchakdagi 😀 panelidan tanlang
+  (yoki klaviaturadan: Windows'da <b>Win + .</b>).
+  Kirill maydoni bo'sh qolsa, lotin matndan avtomatik o'giriladi.
+</div>
+
+{# ------------------------------------------------------------------ #}
+<form method="post" action="/admin/texts/main" class="card" id="main">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>👋 Salomlashish va tabrik</h2>
+  {% for m in main_texts %}
+  <div class="grid g2">
+    <div class="field"><label>{{ m.label }}</label>
+      <textarea name="{{ m.key }}" rows="6" class="emoji-target">{{ m.lat }}</textarea>
+      <div class="help">{{ m.help }}</div></div>
+    <div class="field"><label>Kirill</label>
+      <textarea name="{{ m.key }}_cyr" rows="6" class="emoji-target" placeholder="Bo'sh qoldirilsa avtomatik o'giriladi">{{ m.cyr }}</textarea></div>
+  </div>
+  {% endfor %}
+  <button class="btn primary">💾 Saqlash</button>
+</form>
+
+{# ------------------------------------------------------------------ #}
+<div class="card" id="stickers">
+  <h2>🎨 Stikerlar</h2>
+  <p class="muted">Bot muhim lahzalarda matndan oldin stiker yoki katta animatsion emoji yuboradi.
+    Yakka emoji (masalan 🎉 👋 🏆 🔥 ❤️) Telegram'da katta va harakatlanuvchi bo'lib ko'rinadi.</p>
+  <div class="sticker-slots">
+    {% for s in slots %}
+    <div class="slot">
+      <div class="slot-title">{{ s.label }}</div>
+      <div class="slot-now">
+        {% if s.data is none %}<span class="muted">o'chiq</span>
+        {% elif s.data.type == 'emoji' %}<span class="big-emoji">{{ s.data.value }}</span>
+        {% else %}
+          {% if s.data.preview %}<img src="/admin/texts/sticker-preview?f={{ s.data.preview|urlencode }}" alt="{{ s.data.emoji }}" class="stk" onerror="this.outerHTML='<span class=&quot;big-emoji&quot;>'+(this.alt||'🖼')+'</span>'">
+          {% else %}<span class="big-emoji">{{ s.data.emoji or '🖼' }}</span>{% endif %}
+          <div class="small muted">Telegram stikeri</div>
+        {% endif %}
+      </div>
+      <form method="post" action="/admin/texts/sticker" class="slot-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="slot" value="{{ s.key }}">
+        <input type="text" name="emoji" maxlength="16" class="emoji-target" placeholder="🎉"
+               value="{{ s.data.value if s.data and s.data.type == 'emoji' else '' }}">
+        <button class="btn sm primary" name="action" value="emoji">Saqlash</button>
+        {% if s.data %}<button class="btn sm" name="action" value="off">O'chirish</button>{% endif %}
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3 class="mt">Telegram stikerini tanlash</h3>
+  {% if not bot_on %}
+    <div class="alert warn">Bot ishlamayapti (BOT_TOKEN yo'q) — stiker tanlab bo'lmaydi.</div>
+  {% else %}
+  <ol class="small muted steps">
+    <li>Telefoningizdan botga istalgan stikerni yuboring.</li>
+    <li>Bu sahifani yangilang (<b>F5</b>) — stiker pastda paydo bo'ladi.</li>
+    <li>Uni qaysi joyda ishlatishni tanlang.</li>
+  </ol>
+  {% if recent %}
+  <div class="sticker-grid">
+    {% for r in recent %}
+    <div class="stk-item">
+      {% if r.preview %}<img src="/admin/texts/sticker-preview?f={{ r.preview|urlencode }}" alt="{{ r.emoji }}" class="stk" loading="lazy" onerror="this.outerHTML='<span class=&quot;big-emoji&quot;>'+(this.alt||'🖼')+'</span>'">
+      {% else %}<span class="big-emoji">{{ r.emoji or '🖼' }}</span>{% endif %}
+      <div class="small muted">{{ r.emoji }} · {{ r.time }}</div>
+      <form method="post" action="/admin/texts/sticker" class="stk-btns">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="sticker">
+        <input type="hidden" name="file_id" value="{{ r.file_id }}">
+        {% for s in slots %}<button class="btn sm" name="slot" value="{{ s.key }}" title="{{ s.label }}">{{ s.label.split(' ')[0] }}</button>{% endfor %}
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="muted">Hozircha botga stiker yuborilmagan.</div>
+  {% endif %}
+  {% endif %}
+</div>
+
+{# ------------------------------------------------------------------ #}
+<form method="post" action="/admin/texts" id="texts" class="mt">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="texts-bar card">
+    <input type="search" id="tsearch" placeholder="🔎 Matn bo'yicha qidirish (masalan: telefon, namuna, tugma)">
+    <button type="button" class="btn sm" id="openAll">Hammasini ochish</button>
+    <button class="btn primary">💾 Hammasini saqlash</button>
+  </div>
+  <div class="help mb">
+    <b>&lt;b&gt;qalin&lt;/b&gt;</b>, <i>&lt;i&gt;qiya&lt;/i&gt;</i>, <code>&lt;code&gt;namuna&lt;/code&gt;</code> teglarini ishlatish mumkin.
+    <code>{...}</code> ichidagi so'zlarni o'chirmang — ular o'rniga bot ma'lumot qo'yadi.
+  </div>
+
+  {% for g in groups %}
+  <details class="card tgroup" {% if g.has_error %}open{% endif %}>
+    <summary><b>{{ g.title }}</b> <span class="muted small">{{ g.rows|length }} ta</span>
+      {% if g.changed %}<span class="badge blue">{{ g.changed }} ta o'zgartirilgan</span>{% endif %}
+      {% if g.has_error %}<span class="badge err">xato</span>{% endif %}</summary>
+    {% for r in g.rows %}
+    <div class="trow {% if r.error %}has-error{% endif %}" data-search="{{ (r.label ~ ' ' ~ r.lat ~ ' ' ~ r.key)|lower }}">
+      <div class="trow-head">
+        <span><b>{{ r.label }}</b>
+          {% if r.kind == 'button' %}<span class="badge">tugma</span>{% endif %}
+          {% if r.changed %}<span class="badge blue">o'zgartirilgan</span>{% endif %}</span>
+        <button type="button" class="btn sm reset" data-key="{{ r.key }}" data-default="{{ r.default }}" title="Standart matnni qaytarish">↺ Standart</button>
+      </div>
+      <div class="grid g2">
+        <div>
+          {% if r.kind == 'html' %}
+          <textarea name="{{ r.key }}" rows="{{ [2, (r.lat|length // 60) + r.lat.count('\n') + 1]|max }}" class="emoji-target">
+{{ r.lat }}</textarea>
+          {% else %}
+          <input type="text" name="{{ r.key }}" value="{{ r.lat }}" class="emoji-target" maxlength="{{ 60 if r.kind == 'button' else 100 }}">
+          {% endif %}
+        </div>
+        <div>
+          {% if r.kind == 'html' %}
+          <textarea name="{{ r.key }}.cyr" rows="{{ [2, (r.lat|length // 60) + r.lat.count('\n') + 1]|max }}" class="emoji-target" placeholder="{{ r.cyr_auto }}">
+{{ r.cyr }}</textarea>
+          {% else %}
+          <input type="text" name="{{ r.key }}.cyr" value="{{ r.cyr }}" class="emoji-target" placeholder="{{ r.cyr_auto }}" maxlength="{{ 60 if r.kind == 'button' else 100 }}">
+          {% endif %}
+        </div>
+      </div>
+      {% if r.placeholders %}<div class="help">Majburiy: {% for p in r.placeholders %}<code>{{ '{' ~ p ~ '}' }}</code> {% endfor %}</div>{% endif %}
+      {% if r.error %}<div class="err-text">❗️ {{ r.error }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endfor %}
+  <div class="btns mt"><button class="btn primary">💾 Hammasini saqlash</button></div>
+</form>
+
+{# Emoji paneli: oxirgi tanlangan maydonga qo'shadi #}
+<div class="emoji-pop" id="emojiPop">
+  <button type="button" class="emoji-toggle" id="emojiToggle" title="Emoji qo'shish">😀</button>
+  <div class="emoji-list" id="emojiList"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Tez-tez ishlatiladigan emojilar
+  const EMOJI = ("👋 😊 🙂 😉 😍 🤩 🥳 😎 🤔 🧐 😔 🙈 🙏 👍 👏 💪 👇 👉 ☝️ ✋ " +
+    "🎉 🎊 🏆 🥇 🥈 🥉 🏅 🎓 🎒 📚 📘 📖 ✏️ ✍️ 📝 📋 📌 📎 🧩 🔬 🧪 🧮 💻 🌍 " +
+    "✅ ☑️ ❌ ❗️ ⚠️ ⛔️ 🚫 🔒 🔔 📣 📢 💬 ⏳ ⌛️ 🗓 📅 ⏰ 🕘 " +
+    "📱 📞 🏫 🏠 📍 🗺 🆔 👤 👥 🧑‍🎓 👨‍🏫 👩‍🏫 " +
+    "⭐️ 🌟 ✨ 🔥 💡 🎯 🚀 🍀 ❤️ 💙 💚 🇺🇿 ➡️ ⬅️ 🔁 🔄 ↩️").split(" ");
+  let target = null;
+  document.addEventListener("focusin", e => {
+    if (e.target.classList && e.target.classList.contains("emoji-target")) target = e.target;
+  });
+  const list = document.getElementById("emojiList");
+  EMOJI.forEach(em => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = em;
+    // mousedown: maydondan fokus ketib qolmasligi uchun
+    b.addEventListener("mousedown", e => e.preventDefault());
+    b.addEventListener("click", () => {
+      if (!target) { alert("Avval matn maydoniga bosing"); return; }
+      const s = target.selectionStart ?? target.value.length, en = target.selectionEnd ?? s;
+      target.value = target.value.slice(0, s) + em + target.value.slice(en);
+      target.selectionStart = target.selectionEnd = s + em.length;
+      target.dispatchEvent(new Event("input"));
+      target.focus();
+    });
+    list.appendChild(b);
+  });
+  document.getElementById("emojiToggle").addEventListener("mousedown", e => e.preventDefault());
+  document.getElementById("emojiToggle").addEventListener("click", () =>
+    document.getElementById("emojiPop").classList.toggle("open"));
+
+  // Standart matnni qaytarish
+  document.querySelectorAll("button.reset").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest(".trow");
+    row.querySelector(`[name="${b.dataset.key}"]`).value = b.dataset.default;
+    row.querySelector(`[name="${b.dataset.key}.cyr"]`).value = "";
+  }));
+
+  // Qidiruv
+  const groups = document.querySelectorAll("details.tgroup");
+  document.getElementById("tsearch").addEventListener("input", e => {
+    const q = e.target.value.trim().toLowerCase();
+    groups.forEach(g => {
+      let any = false;
+      g.querySelectorAll(".trow").forEach(r => {
+        const hit = !q || r.dataset.search.includes(q);
+        r.style.display = hit ? "" : "none"; any = any || hit;
+      });
+      g.style.display = any ? "" : "none";
+      if (q) g.open = any;
+    });
+  });
+  document.getElementById("openAll").addEventListener("click", () => {
+    const open = ![...groups].every(g => g.open);
+    groups.forEach(g => g.open = open);
+  });
+})();
+</script>
+{% endblock %}

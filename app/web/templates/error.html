@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card empty"><div style="font-size:40px">⚠️</div><h2>{{ title }}</h2><p>{{ message }}</p><a class="btn" href="javascript:history.back()">Orqaga</a></div>
+{% endblock %}
+{% block bare %}
+<div class="login-wrap"><div class="card login center"><div style="font-size:40px">⚠️</div><h2>{{ title }}</h2><p>{{ message }}</p><a class="btn" href="/login">Kirish sahifasi</a></div></div>
+{% endblock %}

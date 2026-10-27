@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Kirish{% endblock %}
+{% block bare %}
+<div class="login-wrap">
+  <div class="login">
+    <div class="center mb"><div style="font-size:40px">🏆</div><h1>{{ setting('olympiad_name') }}</h1><div class="muted">Admin va hakamlar uchun kirish</div></div>
+    <div class="card">
+      {% for kind, msg in flashes %}<div class="alert {{ kind }}">{{ msg }}</div>{% endfor %}
+      {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+      <form method="post" action="/login">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field"><label>Login</label><input type="text" name="username" value="{{ username or '' }}" autocomplete="username" required autofocus></div>
+        <div class="field"><label>Parol</label><input type="password" name="password" autocomplete="current-password" required></div>
+        <button class="btn primary" style="width:100%;justify-content:center">Kirish</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

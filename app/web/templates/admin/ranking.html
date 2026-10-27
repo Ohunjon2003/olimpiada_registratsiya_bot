@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Reyting{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Reyting{% if obj %}: {{ obj.name }}{% endif %}</h1>
+    <div class="muted">{% if round %}{{ round.name }}{% endif %} · {{ 'Sinflar kesimida' if by_grade else 'Umumiy' }} · Reytingda: <b>{{ rows|length }}</b>
+      {% if missing %} · <span class="badge warn">{{ missing }} ta natija kiritilmagan</span>{% endif %}</div></div>
+  <div class="btns no-print">
+    <form method="post" action="/admin/toggle/results_published" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if setting('results_published') %}<button class="btn ok" title="Bosib yashirish mumkin">✅ Natijalar e'lon qilingan</button>{% else %}<button class="btn">📢 Natijalarni e'lon qilish</button>{% endif %}</form>
+    <a class="btn" href="/admin/ranking/export?{{ qs }}">⬇️ Excel</a>
+    <button class="btn" onclick="window.print()">🖨 Chop etish</button>
+  </div>
+</div>
+<form class="card filters mb no-print" method="get">
+  <div class="grow"><label class="small">Fan yoki blok</label><select name="target">
+    <optgroup label="Fanlar">{% for s in subjects %}<option value="s:{{ s.id }}" {% if target == 's:' ~ s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</optgroup>
+    {% if blocks %}<optgroup label="Bloklar">{% for b in blocks %}<option value="b:{{ b.id }}" {% if target == 'b:' ~ b.id %}selected{% endif %}>🧩 {{ b.name }}</option>{% endfor %}</optgroup>{% endif %}
+  </select></div>
+  <div><label class="small">Tur</label><select name="round_id">{% for r in rounds %}<option value="{{ r.id }}" {% if round and r.id == round.id %}selected{% endif %}>{{ r.name }}{{ ' (joriy)' if r.is_current }}</option>{% endfor %}</select></div>
+  <div><label class="small">O'rin berish</label><select name="by_grade"><option value="1" {% if by_grade %}selected{% endif %}>Sinflar kesimida</option><option value="0" {% if not by_grade %}selected{% endif %}>Umumiy</option></select></div>
+  <div><label class="small">Sinf</label><select name="grade_id"><option value="">Barchasi</option>{% for g in grades %}<option value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></div>
+  <div><label class="small">Maktab</label><select name="school_id"><option value="">Barchasi</option>{% for s in schools %}<option value="{{ s.id }}" {% if params.get('school_id') == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn primary">Ko'rsatish</button></div>
+</form>
+
+{% if not obj %}
+  <div class="card empty">Avval fan qo'shing.</div>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>O'rin</th><th>ID</th><th>Ishtirokchi</th><th>Maktab</th><th>Sinf</th>
+    {% if kind == 's' and obj.scoring_mode == 'groups' %}{% for g in obj.groups %}<th>{{ g.name }}</th>{% endfor %}
+    {% elif kind == 's' and obj.scoring_mode == 'uniform' %}<th>To'g'ri</th>
+    {% elif kind == 'b' %}{% for s in obj.subjects %}<th>{{ s.name }}</th>{% endfor %}{% endif %}
+    <th>Ball</th><th>{{ "O'rtacha foiz" if kind == 'b' and obj.aggregation == 'avg_percent' else 'Foiz' }}</th></tr></thead>
+  <tbody>
+  {% set ns = namespace(grade=None) %}
+  {% for r in rows %}
+    {% if by_grade and r.participant.grade_id != ns.grade %}{% set ns.grade = r.participant.grade_id %}
+      <tr><td colspan="20" style="background:#eef2fb"><b>{{ r.participant.grade.name }}-sinf</b> <span class="muted small">({{ r.group_size }} ishtirokchi)</span></td></tr>{% endif %}
+    <tr class="place-{{ r.place }}">
+      <td><b>{{ '🥇' if r.place == 1 else ('🥈' if r.place == 2 else ('🥉' if r.place == 3 else '')) }} {{ r.place }}</b></td>
+      <td>{{ r.participant.code }}</td>
+      <td><a href="/admin/participants/{{ r.participant.id }}">{{ r.participant.last_name }} {{ r.participant.first_name }}</a></td>
+      <td>{{ r.participant.school.name }}</td><td>{{ r.participant.grade.name }}</td>
+      {% if kind == 's' and obj.scoring_mode == 'groups' %}{% for g in obj.groups %}<td>{{ details[r.participant.id].get('g' ~ g.id, '') }}</td>{% endfor %}
+      {% elif kind == 's' and obj.scoring_mode == 'uniform' %}<td>{{ details[r.participant.id].get('correct', '') }}</td>
+      {% elif kind == 'b' %}{% for s in obj.subjects %}<td>{% if s.id not in r.parts %}<span class="muted">—</span>{% elif r.parts[s.id] %}{{ r.parts[s.id].score|num }}{% else %}0{% endif %}</td>{% endfor %}{% endif %}
+      <td class="nowrap"><b>{{ r.score|num }}</b> <span class="muted">/ {{ r.max_score|num }}</span></td>
+      <td><b>{{ r.percent|num }}%</b></td>
+    </tr>
+  {% else %}<tr><td colspan="20" class="empty">Natijalar yo'q</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="grid g2 mt no-print">
+  <form method="post" action="/admin/ranking/advance" class="card" data-confirm="Tanlangan ishtirokchilar keyingi turga o'tkaziladi. Davom etilsinmi?">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for k in ['target', 'round_id', 'grade_id', 'school_id'] %}<input type="hidden" name="{{ k }}" value="{{ params.get(k, target if k == 'target' else (round.id if k == 'round_id' and round else '')) }}">{% endfor %}
+    <input type="hidden" name="by_grade" value="{{ '1' if by_grade else '0' }}">
+    <h2>Keyingi turga o'tkazish</h2>
+    <div class="grid g3">
+      <div><label class="small">Qaysi turga</label><select name="dest_round_id">{% for r in rounds if not round or r.id != round.id %}<option value="{{ r.id }}">{{ r.name }}</option>{% else %}<option value="">Avval yangi tur qo'shing</option>{% endfor %}</select></div>
+      <div><label class="small">Shart</label><select name="mode"><option value="top">O'rin ≤ (har sinfda/umumiy)</option><option value="percent">Foiz ≥</option><option value="score">Ball ≥</option></select></div>
+      <div><label class="small">Qiymat</label><input type="number" name="value" step="any" value="3" required></div>
+    </div>
+    <div class="help">Joriy filtrlar (sinf, maktab, o'rin berish usuli) hisobga olinadi. Yangi turga «faqat o'tkazilganlar» rejimi avtomatik yoqiladi.</div>
+    <button class="btn primary mt">➡️ O'tkazish</button>
+  </form>
+  <div class="card">
+    <h2>Natijalarni yetkazish</h2>
+    <p class="muted small">Natijalar e'lon qilingach, har bir o'quvchiga uning bali va o'rni bot orqali yuboriladi.</p>
+    <form method="post" action="/admin/broadcasts/quick/results" class="inline" data-confirm="Barcha ishtirokchilarga natijalar yuborilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id if round }}"><button class="btn" {% if not setting('results_published') %}disabled title="Avval natijalarni e'lon qiling"{% endif %}>📨 Natijalarni botga yuborish</button></form>
+    <form method="post" action="/admin/broadcasts/quick/certificates" class="inline" data-confirm="Sertifikatlar yuborilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" {% if not (setting('results_published') and setting('certificates_enabled')) %}disabled title="Natijalar e'lon qilingan va sertifikatlar yoqilgan bo'lishi kerak"{% endif %}>🎓 Sertifikatlarni yuborish</button></form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

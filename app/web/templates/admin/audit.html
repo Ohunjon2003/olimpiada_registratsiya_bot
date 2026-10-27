@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager %}
+{% block title %}Jurnal{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Jurnal</h1><div class="muted">Kim, qachon, nimani o'zgartirgani.</div></div></div>
+<form class="card filters mb" method="get">
+  <div><label class="small">Foydalanuvchi</label><select name="username"><option value="">Barchasi</option>{% for u in usernames %}<option {% if params.get('username') == u %}selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+  <div><label class="small">Bo'lim</label><select name="entity"><option value="">Barchasi</option>{% for e in entities %}<option value="{{ e }}" {% if params.get('entity') == e %}selected{% endif %}>{{ names.get(e, e) }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn primary">Filtrlash</button><a class="btn" href="/admin/audit">Tozalash</a></div>
+</form>
+<div class="table-wrap"><table>
+  <thead><tr><th>Vaqt</th><th>Kim</th><th>Amal</th><th>Bo'lim</th><th>Tavsif</th><th>Eski</th><th>Yangi</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td class="nowrap small">{{ r.at|dt('%d.%m.%Y %H:%M:%S') }}</td><td>{{ r.username }}</td><td><span class="badge">{{ r.action }}</span></td>
+    <td>{{ names.get(r.entity, r.entity) }}{% if r.entity_id %} #{{ r.entity_id }}{% endif %}</td><td>{{ r.summary }}</td>
+    <td><div class="diff">{{ pretty(r.old) }}</div></td><td><div class="diff">{{ pretty(r.new) }}</div></td><td class="small muted">{{ r.ip }}</td></tr>
+  {% else %}<tr><td colspan="8" class="empty">Yozuvlar yo'q</td></tr>{% endfor %}
+  </tbody></table></div>
+{{ pager(page) }}
+{% endblock %}

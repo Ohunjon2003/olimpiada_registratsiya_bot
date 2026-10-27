@@ -1,0 +1,8 @@
+{# Davomat hisoblagichlari. oob=True bo'lsa HTMX javobida sahifadagi blokni yangilaydi #}
+<div id="att-counts" class="att-counts" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <button type="button" class="att-stat" data-att="">👥 Jami <b>{{ counts.total }}</b></button>
+  <button type="button" class="att-stat came" data-att="came">✅ Keldi <b>{{ counts.came }}</b></button>
+  <button type="button" class="att-stat absent" data-att="absent">❌ Kelmadi <b>{{ counts.absent }}</b></button>
+  <button type="button" class="att-stat unmarked" data-att="unmarked">❔ Belgilanmagan <b>{{ counts.unmarked }}</b></button>
+  {% if counts.total %}<div class="att-bar"><span class="came" style="width: {{ (counts.came * 100 / counts.total)|round(1) }}%"></span><span class="absent" style="width: {{ (counts.absent * 100 / counts.total)|round(1) }}%"></span></div>{% endif %}
+</div>

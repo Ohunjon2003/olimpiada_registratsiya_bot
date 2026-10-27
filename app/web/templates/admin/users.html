@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Hakamlar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Hakamlar va adminlar</h1><div class="muted">Hakamga login va parol bering. Fan biriktirilmasa, hakam barcha fanlarga ball kirita oladi.</div></div>
+  <a class="btn primary" href="/admin/users/new">＋ Yangi hakam</a>
+</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Login</th><th>F.I.O</th><th>Rol</th><th>Fanlar</th><th>Kiritgan natijalar</th><th>Oxirgi kirish</th><th>Holat</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr class="{{ '' if u.is_active else 'inactive' }}">
+    <td><a href="/admin/users/{{ u.id }}"><b>{{ u.username }}</b></a></td>
+    <td>{{ u.full_name }}</td>
+    <td><span class="badge {{ 'blue' if u.is_admin }}">{{ 'admin' if u.is_admin else 'hakam' }}</span></td>
+    <td>{{ u.subjects|map(attribute='name')|join(', ') or ('—' if u.is_admin else 'barcha fanlar') }}</td>
+    <td>{{ counts.get(u.id, 0) }}</td>
+    <td class="small">{{ u.last_login|dt or '—' }}</td>
+    <td>{% if u.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge err">bloklangan</span>{% endif %}</td>
+    <td class="right nowrap"><a class="btn sm" href="/admin/users/{{ u.id }}">Tahrirlash</a>
+      {% if u.id != user.id %}<form method="post" action="/admin/users/{{ u.id }}/delete" class="inline" data-confirm="«{{ u.username }}» o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">O'chirish</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+{% endblock %}

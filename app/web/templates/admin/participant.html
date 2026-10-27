@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ p.full_name }}{% endblock %}
+{% block crumbs %}<a href="/admin/participants">Ishtirokchilar</a> / {{ p.code }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ p.last_name }} {{ p.first_name }} <span class="badge blue">ID {{ p.code }}</span></h1>
+    <div class="muted">Ro'yxatdan o'tgan: {{ p.created_at|dt }} · Telegram: {% if p.tg_username %}@{{ p.tg_username }}{% else %}{{ p.telegram_id }}{% endif %} · Til: {{ 'kirill' if p.lang == 'cyr' else 'lotin' }}
+    {% if p.bot_blocked %} · <span class="badge warn">botni bloklagan</span>{% endif %}</div></div>
+</div>
+<div class="grid g2">
+  <form method="post" action="/admin/participants/{{ p.id }}/save" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h2>Ma'lumotlar</h2>
+    <div class="grid g2">
+      <div class="field"><label>Familiya</label><input type="text" name="last_name" value="{{ p.last_name }}" required></div>
+      <div class="field"><label>Ism</label><input type="text" name="first_name" value="{{ p.first_name }}" required></div>
+    </div>
+    <div class="grid g2">
+      <div class="field"><label>Telefon</label><input type="text" name="phone" value="{{ p.phone }}" required></div>
+      <div class="field"><label>Instagram</label><input type="text" name="instagram_username" value="{{ p.instagram_username }}"></div>
+    </div>
+    <div class="grid g2">
+      <div class="field"><label>Maktab</label><select name="school_id">{% for s in schools %}<option value="{{ s.id }}" {% if s.id == p.school_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Sinf</label><select name="grade_id">{% for g in grades %}<option value="{{ g.id }}" {% if g.id == p.grade_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field"><label>Manzil</label><input type="text" name="address" value="{{ p.address }}"></div>
+    <div class="field"><label>Fanlar</label>
+      {% set mine = p.subjects|map(attribute='id')|list %}
+      <div class="multi-box">{% for s in subjects %}<label class="check"><input type="checkbox" name="subjects" value="{{ s.id }}" {% if s.id in mine %}checked{% endif %}> {{ s.name }}</label>{% endfor %}</div></div>
+    <div class="field"><label>Holat</label><select name="status"><option value="active">Faol</option><option value="disqualified" {% if p.status == 'disqualified' %}selected{% endif %}>Chetlatilgan (reytingga kirmaydi)</option></select></div>
+    <div class="field"><label>Izoh (faqat adminlar uchun)</label><textarea name="note" rows="2">{{ p.note }}</textarea></div>
+    <div class="btns"><button class="btn primary">💾 Saqlash</button></div>
+  </form>
+
+  <div>
+    <div class="card">
+      <h2>Qo'shimcha savollar</h2>
+      {% if p.answers %}
+      <dl class="kv">{% for a in p.answers %}<dt>{{ a.question.text if a.question else '—' }}</dt><dd>{{ a.value }}</dd>{% endfor %}</dl>
+      {% else %}<div class="muted">Javoblar yo'q</div>{% endif %}
+    </div>
+    <div class="card">
+      <h2>Natijalar</h2>
+      {% if results %}
+      <div class="table-wrap"><table><thead><tr><th>Tur</th><th>Fan</th><th>Ball</th><th>Foiz</th><th>Hakam</th></tr></thead><tbody>
+        {% for r, s, rd in results %}<tr><td>{{ rd.name }}</td><td>{{ s.name }}</td><td><b>{{ r.score|num }}</b> / {{ r.max_score|num }}</td><td>{{ r.percent|num }}%</td><td class="small">{{ r.entered_by.username if r.entered_by else '—' }}<br>{{ r.updated_at|dt }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<div class="muted">Hali natija kiritilmagan</div>{% endif %}
+    </div>
+    <div class="card">
+      <h2>Sertifikatlar</h2>
+      {% if cert_items %}
+        <div class="btns">{% for it in cert_items %}<a class="btn sm" href="/admin/participants/{{ p.id }}/certificate/{{ loop.index0 }}">🎓 {{ it.template.name }} — {{ it.title }}</a>{% endfor %}</div>
+      {% else %}<div class="muted">Mos sertifikat yo'q (faol shablon va natija kerak).</div>{% endif %}
+    </div>
+    <form method="post" action="/admin/participants/{{ p.id }}/message" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h2>Botda xabar yuborish</h2>
+      <textarea name="text" rows="3" placeholder="Xabar matni"></textarea>
+      <button class="btn mt">📨 Yuborish</button>
+    </form>
+    <form method="post" action="/admin/participants/{{ p.id }}/delete" class="card" data-confirm="Ishtirokchi va uning barcha natijalari o'chiriladi. Davom etilsinmi?">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h2>Xavfli amal</h2>
+      <p class="muted small">O'chirilgan ishtirokchi botda qaytadan ro'yxatdan o'tishi mumkin. Odatda «Chetlatilgan» holatini qo'yish yetarli.</p>
+      <button class="btn danger">🗑 O'chirish</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

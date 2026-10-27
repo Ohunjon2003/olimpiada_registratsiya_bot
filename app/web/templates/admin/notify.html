@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Telegram xabarnomalar{% endblock %}
+{% block crumbs %}Tizim / Telegram xabarnomalar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>🔔 Telegram xabarnomalar</h1>
+    <div class="muted">Bot sizga Telegram'da xabar beradi: yangi o'quvchilar soni, xatolar, zaxira nusxalar. Botda <code>/stat</code> — tezkor statistika.</div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card" id="link">
+    <h2>📱 Ulangan akkauntlar</h2>
+    {% if chats %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Akkaunt</th><th>Ulagan</th><th></th></tr></thead>
+      <tbody>
+      {% for c in chats %}
+        <tr><td>{{ c.name }}<div class="small muted">ID: {{ c.id }}</div></td><td>{{ c.by }}</td>
+          <td class="right"><form method="post" action="/admin/notify/remove/{{ c.id }}" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Uzish</button></form></td></tr>
+      {% endfor %}
+      </tbody></table></div>
+    {% else %}
+      <div class="alert warn">Hali hech qanday akkaunt ulanmagan — xabarnomalar yuborilmaydi.</div>
+    {% endif %}
+
+    {% if code %}
+    <div class="link-code mt">
+      <div class="muted small">Kod {{ ttl_min }} daqiqa amal qiladi va bir marta ishlatiladi.</div>
+      {% if bot_username %}
+      <a class="btn primary" href="https://t.me/{{ bot_username }}?start=link_{{ code }}" target="_blank" rel="noopener">📲 Telegram'da ochish va ulash</a>
+      <div class="small muted mt">Telefoningizda ochish uchun havola: <code>t.me/{{ bot_username }}?start=link_{{ code }}</code></div>
+      {% endif %}
+      <div class="mt">Yoki botga shu buyruqni yuboring: <span class="code-big">/link {{ code }}</span></div>
+      <div class="small muted mt">Ulangach bu sahifani yangilang.</div>
+    </div>
+    {% else %}
+    <form method="post" action="/admin/notify/code" class="mt">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn primary">➕ Akkaunt ulash</button>
+      <div class="help">Bir nechta admin ulashi mumkin — har biri uchun alohida kod oling.</div>
+    </form>
+    {% endif %}
+  </div>
+
+  <form method="post" action="/admin/notify/settings" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h2>⚙️ Nima haqida xabar berilsin</h2>
+    <div class="field"><label>Har necha yangi o'quvchida xabar berish</label>
+      <input type="number" name="notify_every" min="0" value="{{ setting('notify_every') }}">
+      <div class="help">Masalan 100 — 100, 200, 300-o'quvchida «🎉 ... taga yetdi» xabari. 0 — yubormaslik.</div></div>
+    <label class="check field"><input type="checkbox" name="notify_errors" {% if setting('notify_errors') %}checked{% endif %}>
+      Xatolar haqida (bot yoki panel xatosi, kanalni tekshirib bo'lmasligi, zaxira olinmasligi)</label>
+    <label class="check field"><input type="checkbox" name="backup_to_telegram" {% if setting('backup_to_telegram') %}checked{% endif %}>
+      Avtomatik zaxira nusxani Telegram'ga yuborish <span class="muted">(har {{ setting('backup_interval_hours') }} soatda, .zip)</span></label>
+    <div class="help mb">Bir xil xato 10 daqiqada ko'pi bilan bir marta yuboriladi — telefoningiz xabarlarga to'lib ketmaydi.</div>
+    <button class="btn primary">💾 Saqlash</button>
+  </form>
+</div>
+
+<div class="card mt">
+  <h2>🧪 Sinash</h2>
+  <div class="btns">
+    <form method="post" action="/admin/notify/test" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">🔔 Sinov xabari yuborish</button></form>
+    <form method="post" action="/admin/notify/backup" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">💾 Hozir zaxira olib Telegram'ga yuborish</button></form>
+  </div>
+  <div class="help mt">⚠️ Zaxira faylida barcha o'quvchilarning shaxsiy ma'lumotlari bor. Uni faqat o'zingizning shaxsiy Telegram akkauntingizga ulang.</div>
+</div>
+
+<div class="card mt" id="monitoring">
+  <h2>📡 Server holatini kuzatish (UptimeRobot)</h2>
+  <p>Server yoki bot to'xtab qolsa, bepul <b>UptimeRobot</b> xizmati sizga email/Telegram orqali darhol xabar beradi:</p>
+  <ol>
+    <li><a href="https://uptimerobot.com" target="_blank" rel="noopener">uptimerobot.com</a> da ro'yxatdan o'ting (bepul).</li>
+    <li><b>Add New Monitor</b> → turi <b>HTTP(s)</b>.</li>
+    <li>URL: <code>https://SIZNING-DOMEN/health</code> (domen bo'lmasa <code>http://SERVER-IP/health</code>).</li>
+    <li>Interval: <b>5 daqiqa</b>. <b>Alert Contacts</b> da email yoki Telegram'ni tanlang.</li>
+  </ol>
+  <p class="small muted"><code>/health</code> manzili baza va bot ishlayotganini tekshiradi: hammasi joyida bo'lsa 200, muammo bo'lsa 503 javob qaytaradi —
+    UptimeRobot 503 ni ham «ishlamayapti» deb hisoblaydi.</p>
+</div>
+{% endblock %}

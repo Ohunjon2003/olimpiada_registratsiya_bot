@@ -1,0 +1,30 @@
+{% macro pager(page) -%}
+{% if page.pages > 1 %}
+<div class="pager">
+  {% if page.page > 1 %}<a href="{{ page.url(page.page - 1) }}">‹</a>{% endif %}
+  {% if page.window[0] > 1 %}<a href="{{ page.url(1) }}">1</a>{% if page.window[0] > 2 %}<span>…</span>{% endif %}{% endif %}
+  {% for p in page.window %}
+    {% if p == page.page %}<span class="cur">{{ p }}</span>{% else %}<a href="{{ page.url(p) }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+  {% if page.window[-1] < page.pages %}{% if page.window[-1] < page.pages - 1 %}<span>…</span>{% endif %}<a href="{{ page.url(page.pages) }}">{{ page.pages }}</a>{% endif %}
+  {% if page.page < page.pages %}<a href="{{ page.url(page.page + 1) }}">›</a>{% endif %}
+  <span class="muted small">Jami: {{ page.total }}</span>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro select(name, items, current, empty='Barchasi', label=None) -%}
+<div>
+  {% if label %}<label class="small">{{ label }}</label>{% endif %}
+  <select name="{{ name }}">
+    {% if empty %}<option value="">{{ empty }}</option>{% endif %}
+    {% for it in items %}<option value="{{ it.id }}" {% if current|string == it.id|string %}selected{% endif %}>{{ it.name }}{% if it.is_active is defined and not it.is_active %} (nofaol){% endif %}</option>{% endfor %}
+  </select>
+</div>
+{%- endmacro %}
+
+{% macro csrf_input(csrf) %}<input type="hidden" name="csrf" value="{{ csrf }}">{% endmacro %}
+
+{% macro errors(list) -%}
+{% if list %}<div class="alert error"><b>Xatoliklar:</b><ul>{% for e in list %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{%- endmacro %}

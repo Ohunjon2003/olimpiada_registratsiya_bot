@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Arxiv va tozalash{% endblock %}
+{% block crumbs %}Tizim / Arxiv va tozalash{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🗄 Arxiv va tozalash</h1>
+    <div class="muted">Olimpiada tugagach: hamma ma'lumotni Excel'ga yuklab oling, so'ng xohlasangiz yangi olimpiada uchun tozalang.</div></div>
+</div>
+
+<div class="grid g4 mb">
+  <div class="card stat"><div class="v">{{ c.participants }}</div><div class="l">Ishtirokchilar</div></div>
+  <div class="card stat"><div class="v">{{ c.results }}</div><div class="l">Natijalar</div></div>
+  <div class="card stat"><div class="v">{{ c.attendance }}</div><div class="l">Davomat belgilari</div></div>
+  <div class="card stat"><div class="v">{{ c.db_mb }} MB</div><div class="l">Baza hajmi</div></div>
+</div>
+
+<div class="card">
+  <h2>1️⃣ Hammasini Excel'ga yuklab olish</h2>
+  <p>Bitta faylda bir nechta varaq bo'ladi:</p>
+  <ul class="small">
+    <li><b>Xulosa</b> — umumiy sonlar, har tur bo'yicha davomat va natijalar</li>
+    <li><b>Ishtirokchilar</b> — barcha ma'lumotlar, qo'shimcha savollar javoblari va davomat</li>
+    <li><b>Har bir fan va blok reytingi</b> (har tur uchun alohida varaq, g'oliblar rangli)</li>
+    <li><b>Barcha natijalar</b> — kim, qaysi fandan, necha ball, qaysi hakam kiritgan</li>
+    <li><b>Davomat</b> va <b>E'tirozlar</b></li>
+  </ul>
+  <div class="btns">
+    <a class="btn primary" href="/admin/archive/export">⬇️ To'liq Excel yuklab olish</a>
+    <a class="btn" href="/admin/certificates">🎓 Sertifikatlar (ZIP)</a>
+    <a class="btn" href="/admin/backups">💾 Baza zaxirasi (.db)</a>
+  </div>
+</div>
+
+<form method="post" action="/admin/archive/cleanup" class="card mt danger-zone" id="cleanup"
+      data-confirm="Belgilangan ma'lumotlar butunlay o'chiriladi. Davom etasizmi?">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>2️⃣ Eski ma'lumotlarni tozalash</h2>
+  <div class="alert info">
+    🛡 Tozalashdan oldin <b>avtomatik zaxira nusxa</b> olinadi{% if has_tg %} va Telegram'ingizga yuboriladi{% endif %} —
+    xato bo'lsa, «Zaxira nusxalar»dan qaytarib olish mumkin.
+    Maktablar, sinflar, fanlar, kanallar, nizom, hakamlar, matnlar va sertifikat dizaynlari <b>saqlanib qoladi</b>.
+  </div>
+  <label class="check field"><input type="checkbox" name="what" value="participants" checked>
+    <b>Barcha ishtirokchilar</b> va ularga tegishli hamma narsa: natijalar, davomat, e'tirozlar ({{ c.participants }} ta). Yangi o'quvchilar ID raqami yana 0001 dan boshlanadi.</label>
+  <label class="check field"><input type="checkbox" name="what" value="results">
+    Faqat natijalar, davomat va e'tirozlar — o'quvchilar ro'yxati qoladi <span class="muted">(olimpiadani qayta o'tkazish uchun)</span></label>
+  <label class="check field"><input type="checkbox" name="what" value="broadcasts" checked> Ommaviy xabarlar tarixi ({{ c.broadcasts }} ta)</label>
+  <label class="check field"><input type="checkbox" name="what" value="audit"> Jurnal (kim nimani o'zgartirgani, {{ c.audit }} ta yozuv)</label>
+  <label class="check field"><input type="checkbox" name="what" value="flags" checked>
+    «Natijalar e'lon qilingan», sertifikat va e'tirozlarni o'chirish, ro'yxatdan o'tish muddatlarini tozalash</label>
+  <div class="grid g2 mt">
+    <div class="field"><label>Tasdiqlash uchun <b>{{ word }}</b> deb yozing</label><input type="text" name="confirm" autocomplete="off" required></div>
+    <div class="field"><label>Parolingiz</label><input type="password" name="password" autocomplete="current-password" required></div>
+  </div>
+  <button class="btn danger">🧹 Tozalash</button>
+  <div class="help mt">💡 SQLite bunday hajmda (bir necha ming o'quvchi) sekinlashmaydi — tozalash asosan yangi olimpiadani toza boshlash va shaxsiy ma'lumotlarni keraksiz saqlamaslik uchun.</div>
+</form>
+{% endblock %}

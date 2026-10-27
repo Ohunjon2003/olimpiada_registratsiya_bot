@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Parolni almashtirish{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Parolni almashtirish</h1></div>
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+<form method="post" class="card form-narrow" style="max-width:440px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="field"><label>Joriy parol</label><input type="password" name="old" required autocomplete="current-password"></div>
+  <div class="field"><label>Yangi parol</label><input type="password" name="new" required autocomplete="new-password"><div class="help">Kamida 8 belgi, harf va raqam aralash.</div></div>
+  <div class="field"><label>Yangi parol (takror)</label><input type="password" name="new2" required autocomplete="new-password"></div>
+  <button class="btn primary">Saqlash</button>
+</form>
+{% endblock %}

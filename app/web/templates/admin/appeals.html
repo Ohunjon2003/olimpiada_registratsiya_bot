@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager, select %}
+{% block title %}E'tirozlar{% endblock %}
+{% block crumbs %}E'tirozlar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>⚖️ E'tirozlar</h1>
+    <div class="muted">O'quvchilar natija e'lon qilingach botdagi «⚖️ E'tiroz» tugmasi orqali yozadi. Javobingiz o'quvchiga botda yuboriladi.</div></div>
+</div>
+
+<form method="post" action="/admin/appeals/settings" class="card filters mb">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="check"><input type="checkbox" name="appeals_enabled" {% if setting('appeals_enabled') %}checked{% endif %}> <b>E'tiroz qabul qilish yoqilgan</b></label>
+  <div><label class="small">Qabul qilish muddati (gacha)</label><input type="datetime-local" name="appeals_until" value="{{ setting('appeals_until')|dtinput }}"></div>
+  <div class="btns"><button class="btn primary">💾 Saqlash</button></div>
+  <div class="small muted grow">
+    {% if not setting('results_published') %}⚠️ Natijalar hali e'lon qilinmagan — tugma o'quvchilarga keyin chiqadi.
+    {% else %}Bo'sh muddat — cheksiz. Bir o'quvchi har fan bo'yicha bitta e'tiroz yoza oladi.{% endif %}
+  </div>
+</form>
+
+<div class="tabs mb">
+  {% for k, l in STATUS.items() %}
+  <a href="?status={{ k }}" class="{% if status == k %}active{% endif %}">{{ l }} <span class="badge">{{ counts.get(k, 0) }}</span></a>
+  {% endfor %}
+  <a href="?status=all" class="{% if status == 'all' %}active{% endif %}">Barchasi</a>
+</div>
+
+<form class="card filters mb" method="get">
+  <input type="hidden" name="status" value="{{ status }}">
+  <div class="grow"><label class="small">Qidiruv</label><input type="search" name="q" value="{{ params.get('q', '') }}" placeholder="ID, ism, familiya yoki telefon"></div>
+  {{ select('subject_id', subjects, params.get('subject_id', ''), label='Fan') }}
+  <div class="btns"><button class="btn primary">Filtrlash</button><a class="btn" href="?status={{ status }}">Tozalash</a></div>
+</form>
+
+{% for a in rows %}
+{% set p = a.participant %}{% set r = results.get(a.id) %}
+<div class="card appeal {{ a.status }}">
+  <div class="appeal-head">
+    <div>
+      <b>№{{ a.id }}</b> · <a href="/admin/participants/{{ p.id }}">{{ p.last_name }} {{ p.first_name }}</a>
+      <span class="muted">(ID {{ p.code }}, {{ p.school.name }}, {{ p.grade.name }}-sinf)</span>
+    </div>
+    <span class="badge {{ 'warn' if a.status == 'new' else ('ok' if a.status == 'accepted' else 'err') }}">{{ STATUS[a.status] }}</span>
+  </div>
+  <div class="small muted">
+    📘 <b>{{ a.subject.name if a.subject else '—' }}</b>{% if a.round %} · {{ a.round.name }}{% endif %} ·
+    hozirgi ball: <b>{% if r %}{{ r.score|num }} / {{ r.max_score|num }} ({{ r.percent|num }}%){% else %}—{% endif %}</b> ·
+    {{ a.created_at|dt }}
+  </div>
+  <div class="appeal-text">{{ a.text }}</div>
+  {% if a.status != 'new' %}
+    <div class="appeal-answer"><b>Javob</b> ({{ a.answered_by }}, {{ a.answered_at|dt }}): {{ a.answer }}</div>
+  {% endif %}
+  <form method="post" action="/admin/appeals/{{ a.id }}/answer" class="appeal-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <textarea name="answer" rows="2" placeholder="O'quvchiga javob: masalan «5-savol qayta tekshirildi, ball 2 ga oshirildi»" required minlength="2" maxlength="1000">{{ a.answer if a.status != 'new' else '' }}</textarea>
+    <div class="btns">
+      {% if a.subject_id %}<a class="btn sm" href="/judge/enter?subject_id={{ a.subject_id }}{% if a.round_id %}&round_id={{ a.round_id }}{% endif %}&q={{ p.code }}" target="_blank">✍️ Ballni o'zgartirish</a>{% endif %}
+      <button class="btn sm primary" name="decision" value="accepted">✅ Qabul qilish</button>
+      <button class="btn sm danger" name="decision" value="rejected">❌ Rad etish</button>
+    </div>
+  </form>
+</div>
+{% else %}
+<div class="card empty">E'tirozlar yo'q</div>
+{% endfor %}
+{{ pager(page) }}
+{% endblock %}

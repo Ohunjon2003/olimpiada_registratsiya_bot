@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Zaxira nusxalar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Zaxira nusxalar</h1><div class="muted">Avtomatik zaxira har {{ setting('backup_interval_hours') }} soatda olinadi, oxirgi {{ keep }} tasi saqlanadi. Muhim nusxalarni kompyuteringizga ham yuklab oling.
+    {% if setting('backup_to_telegram') %}Avtomatik nusxalar ulangan admin Telegram akkauntlariga ham yuboriladi (<a href="/admin/notify">sozlash</a>).{% endif %}</div></div>
+  <form method="post" action="/admin/backups/create"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary">💾 Hozir zaxira olish</button></form>
+</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Fayl</th><th>Hajmi</th><th></th></tr></thead>
+  <tbody>
+  {% for f in files %}
+    <tr><td>{{ f.name }}</td><td>{{ (f.size / 1024)|round(1) }} KB</td><td class="right"><div class="btns" style="justify-content:flex-end">
+      <a class="btn sm" href="/admin/backups/download/{{ f.name }}">⬇️ Yuklab olish</a>
+      <form method="post" action="/admin/backups/telegram/{{ f.name }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">📤 Telegram'ga</button></form>
+    </div></td></tr>
+  {% else %}<tr><td colspan="3" class="empty">Hali zaxira nusxa yo'q</td></tr>{% endfor %}
+  </tbody></table></div>
+<div class="card mt small">
+  <b>Zaxiradan tiklash:</b> serverda xizmatni to'xtating (<code>sudo systemctl stop olimpiada</code>), yuklab olingan faylni
+  <code>data/olimpiada.db</code> o'rniga qo'ying, <code>data/olimpiada.db-wal</code> va <code>-shm</code> fayllarini o'chiring va xizmatni qayta yoqing.
+</div>
+{% endblock %}

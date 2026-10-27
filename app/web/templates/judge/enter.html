@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager %}
+{% block title %}Ball kiritish{% endblock %}
+{% block content %}
+{% if not subjects %}
+  <div class="card empty">Sizga fan biriktirilmagan yoki faol fan yo'q.</div>
+{% else %}
+<div class="page-head">
+  <div><h1>Ball kiritish: {{ subject.name }}</h1>
+    <div class="muted">{{ round.name }} ·
+      {% if subject.scoring_mode == 'groups' %}Har xil ball: {% for g in subject.groups %}{{ g.name }} — {{ g.question_count }}×{{ g.points|num }}{{ ', ' if not loop.last }}{% endfor %}
+      {% elif subject.scoring_mode == 'manual' %}Ball to'g'ridan-to'g'ri kiritiladi
+      {% else %}{{ subject.total_questions }} savol × {{ subject.points_per_question|num }} ball{% endif %}
+      · Maks: <b>{{ subject.max_score|num }}</b> · Kiritilgan: <b>{{ entered }}</b> / {{ all_n }}</div>
+  </div>
+  {% if user.is_admin %}<a class="btn" href="/admin/ranking?target=s:{{ subject.id }}&round_id={{ round.id }}">🏅 Reyting</a>{% endif %}
+</div>
+{% if locked %}<div class="alert warn">🔒 Bu fan yoki tur natijalari qulflangan — o'zgartirib bo'lmaydi.</div>{% endif %}
+<form class="card filters mb no-print" method="get">
+  <div><label class="small">Fan</label><select name="subject_id" onchange="this.form.submit()">{% for s in subjects %}<option value="{{ s.id }}" {% if s.id == subject.id %}selected{% endif %}>{{ s.name }}{% if s.is_locked %} 🔒{% endif %}</option>{% endfor %}</select></div>
+  {% if rounds %}<div><label class="small">Tur</label><select name="round_id">{% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}{{ ' (joriy)' if r.is_current }}</option>{% endfor %}</select></div>{% endif %}
+  <div><label class="small">Sinf</label><select name="grade_id"><option value="">Barchasi</option>{% for g in grades %}<option value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></div>
+  {% if names %}<div><label class="small">Maktab</label><select name="school_id"><option value="">Barchasi</option>{% for s in schools %}<option value="{{ s.id }}" {% if params.get('school_id') == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>{% endif %}
+  <div><label class="small">Holat</label><select name="status"><option value="">Barchasi</option><option value="missing" {% if params.get('status') == 'missing' %}selected{% endif %}>Kiritilmaganlar</option><option value="done" {% if params.get('status') == 'done' %}selected{% endif %}>Kiritilganlar</option></select></div>
+  <div><label class="small">Davomat</label><select name="attendance"><option value="">Barchasi</option><option value="came" {% if params.get('attendance') == 'came' %}selected{% endif %}>✅ Faqat kelganlar</option><option value="absent" {% if params.get('attendance') == 'absent' %}selected{% endif %}>❌ Kelmaganlar</option></select></div>
+  <div class="grow"><label class="small">Qidiruv</label><input type="search" name="q" value="{{ params.get('q', '') }}" placeholder="{{ 'ID, ism yoki familiya' if names else 'ID raqam' }}"></div>
+  <div><label class="small">Sahifada</label><select name="per_page">{% for n in [25, 50, 100, 200] %}<option {% if page.per_page == n %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn primary">Ko'rsatish</button></div>
+</form>
+<div class="table-wrap enter">
+<table>
+  <thead><tr><th>ID</th>{% if names %}<th>Ishtirokchi</th>{% endif %}<th>Sinf</th>
+    <th>{% if subject.scoring_mode == 'manual' %}Ball{% else %}To'g'ri javoblar{% endif %}</th><th>Ball</th><th>Foiz</th><th></th></tr></thead>
+  <tbody>
+  {% for row in rows %}{% with p=row['p'], result=row['result'], state=row['state'], error=row['error'], values=row['values'] %}{% include "judge/_row.html" %}{% endwith %}
+  {% else %}<tr><td colspan="7" class="empty">Ishtirokchilar topilmadi</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pager(page) }}
+<div class="muted small mt">💡 Raqamni yozib <b>Enter</b> bosing — saqlanadi va keyingi qatorga o'tadi. Bir nechta katak bo'lsa, Enter keyingi katakka o'tkazadi.</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  var lastEnterRow = null;
+  function saveRow(el) {
+    var tr = el.closest('tr');
+    tr.classList.remove('dirty');
+    htmx.trigger(tr, 'save');
+  }
+  // Enter: keyingi katakka yoki saqlash; o'qlar bilan yuqori/pastga
+  document.addEventListener('keydown', function (e) {
+    var inp = e.target;
+    if (!inp.classList || !inp.classList.contains('score')) return;
+    var tr = inp.closest('tr');
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var list = Array.from(tr.querySelectorAll('input.score:not([disabled])'));
+      var i = list.indexOf(inp);
+      if (i < list.length - 1) { list[i + 1].focus(); list[i + 1].select(); return; }
+      lastEnterRow = tr.id;
+      saveRow(inp);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      var sib = e.key === 'ArrowDown' ? tr.nextElementSibling : tr.previousElementSibling;
+      var t = sib && sib.querySelector('input.score:not([disabled])');
+      if (t) { e.preventDefault(); t.focus(); t.select(); }
+    }
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.classList && e.target.classList.contains('score')) e.target.closest('tr').classList.add('dirty');
+  });
+  // Saqlangandan keyin: muvaffaqiyatli bo'lsa keyingi qatorga, xato bo'lsa shu qatorga fokus
+  document.body.addEventListener('htmx:afterSettle', function (e) {
+    if (!lastEnterRow) return;
+    var tr = document.getElementById(lastEnterRow);
+    lastEnterRow = null;
+    if (!tr) return;
+    var target = tr.classList.contains('error') ? tr : tr.nextElementSibling;
+    var inp = target && target.querySelector('input.score:not([disabled])');
+    if (inp) { inp.focus(); inp.select(); }
+  });
+  // Saqlanmagan o'zgarishlar bo'lsa sahifadan chiqishda ogohlantirish
+  window.addEventListener('beforeunload', function (e) {
+    if (document.querySelector('tr.dirty')) { e.preventDefault(); e.returnValue = ''; }
+  });
+</script>
+{% endblock %}

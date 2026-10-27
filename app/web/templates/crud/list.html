@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ res.title }}{% endblock %}
+{% block crumbs %}Sozlash / {{ res.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ res.title }}</h1><div class="muted">{{ res.help }}</div></div>
+  <a class="btn primary" href="/admin/c/{{ res.key }}/new">＋ Yangi {{ res.singular }}</a>
+</div>
+
+{% if res.bulk %}
+<details class="card mb">
+  <summary><b>Ro'yxatni birdaniga qo'shish</b> <span class="muted small">— har qatorda bitta nom</span></summary>
+  <form method="post" action="/admin/c/{{ res.key }}/bulk" class="mt">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <textarea name="names" rows="6" placeholder="1-maktab&#10;2-maktab&#10;3-maktab"></textarea>
+    <div class="help">Mavjud nomlar takror qo'shilmaydi. Kirill nomlar avtomatik o'giriladi.</div>
+    <button class="btn primary mt">Qo'shish</button>
+  </form>
+</details>
+{% endif %}
+
+{% if items %}
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    {% if res.has_position %}<th style="width:70px">Tartib</th>{% endif %}
+    {% for label, _ in res.columns %}<th>{{ label }}</th>{% endfor %}
+    {% if usage is not none and res.key in ['schools','grades','subjects','rounds'] %}<th>{{ 'O\'tkazilgan' if res.key == 'rounds' else 'Ishtirokchi' }}</th>{% endif %}
+    <th>Holat</th><th class="right">Amallar</th>
+  </tr></thead>
+  <tbody>
+  {% for o in items %}
+  <tr class="{{ '' if o.is_active else 'inactive' }}">
+    {% if res.has_position %}
+    <td class="nowrap">
+      <form method="post" action="/admin/c/{{ res.key }}/{{ o.id }}/move/up" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm" title="Yuqoriga" {% if loop.first %}disabled{% endif %}>↑</button></form>
+      <form method="post" action="/admin/c/{{ res.key }}/{{ o.id }}/move/down" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm" title="Pastga" {% if loop.last %}disabled{% endif %}>↓</button></form>
+    </td>
+    {% endif %}
+    {% for _, fn in res.columns %}<td>{% if loop.first %}<a href="/admin/c/{{ res.key }}/{{ o.id }}"><b>{{ fn(o) }}</b></a>{% else %}{{ fn(o) }}{% endif %}</td>{% endfor %}
+    {% if res.key in ['schools','grades','subjects','rounds'] %}<td>{{ usage.get(o.id, 0) }}</td>{% endif %}
+    <td>
+      <form method="post" action="/admin/c/{{ res.key }}/{{ o.id }}/toggle" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="badge {{ 'ok' if o.is_active else '' }}" style="border:0;cursor:pointer" title="Almashtirish">{{ 'Faol' if o.is_active else 'Nofaol' }}</button>
+      </form>
+    </td>
+    <td class="right nowrap">
+      {% for label, url in res.row_actions %}
+        <form method="post" action="{{ url.format(id=o.id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">{{ label }}</button></form>
+      {% endfor %}
+      <a class="btn sm" href="/admin/c/{{ res.key }}/{{ o.id }}">Tahrirlash</a>
+      <form method="post" action="/admin/c/{{ res.key }}/{{ o.id }}/delete" class="inline" data-confirm="Rostdan o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">O'chirish</button></form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card empty">Hali {{ res.singular }} qo'shilmagan. <a href="/admin/c/{{ res.key }}/new">Qo'shish →</a></div>
+{% endif %}
+{% endblock %}

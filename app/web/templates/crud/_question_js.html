@@ -1,0 +1,12 @@
+<script>
+  // Javob turiga qarab kerakli maydonlarni ko'rsatamiz
+  function syncQ() {
+    var t = document.getElementById('f_qtype').value;
+    var g = (t === 'choice' || t === 'multichoice') ? 'choice' : t;
+    document.querySelectorAll('[data-group]').forEach(function (el) {
+      el.classList.toggle('hidden', el.getAttribute('data-group') !== g);
+    });
+  }
+  document.getElementById('f_qtype').addEventListener('change', syncQ);
+  syncQ();
+</script>

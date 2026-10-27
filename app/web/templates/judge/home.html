@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Hakam{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Assalomu alaykum, {{ user.full_name or user.username }}!</h1>
+  <div class="muted">{% if round %}Joriy tur: <b>{{ round.name }}</b>{% if round.is_locked %} 🔒 qulflangan{% endif %}{% else %}Tur belgilanmagan{% endif %}</div></div></div>
+<div class="grid g3">
+{% for it in items %}
+  {% set pct = (it.entered / it.total * 100) if it.total else 0 %}
+  <div class="card">
+    <h2>{{ it.subject.name }} {% if it.subject.is_locked %}🔒{% endif %}</h2>
+    <div class="muted small mb">Maks. ball: {{ it.subject.max_score|num }} · Ishtirokchilar: {{ it.total }}</div>
+    <div class="progress"><div style="width:{{ pct|round(1) }}%"></div></div>
+    <div class="small mt">Kiritilgan: <b>{{ it.entered }}</b> / {{ it.total }} ({{ pct|round(1) }}%) · Siz kiritgan: <b>{{ it.mine }}</b></div>
+    <div class="btns mt"><a class="btn primary" href="/judge/enter?subject_id={{ it.subject.id }}&status=missing">Kiritilmaganlar</a><a class="btn" href="/judge/enter?subject_id={{ it.subject.id }}">Hammasi</a></div>
+  </div>
+{% else %}<div class="card empty">Sizga fan biriktirilmagan yoki fanlar yo'q.</div>{% endfor %}
+</div>
+<div class="card mt small">
+  <b>Qanday kiritiladi:</b> katakka to'g'ri javoblar sonini yozing va <b>Enter</b> bosing — natija saqlanadi va kursor keyingi o'quvchiga o'tadi.
+  Ball va foiz avtomatik hisoblanadi. Xato kiritilsa qator qizil bo'ladi va saqlanmaydi.
+</div>
+{% endblock %}

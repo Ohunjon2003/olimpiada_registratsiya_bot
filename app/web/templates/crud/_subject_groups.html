@@ -1,0 +1,52 @@
+{# Fan: "har xil ball" rejimi uchun savol guruhlari #}
+<div class="field" data-group="groups">
+  <label>Savol guruhlari</label>
+  <div class="help mb">Masalan: «1–20 savollar» — 20 ta savol, har biri 1 ball; «21–30 savollar» — 10 ta, har biri 2 ball. Hakam har guruhdagi to'g'ri javoblar sonini kiritadi.</div>
+  <table id="groups-table">
+    <thead><tr><th>Guruh nomi</th><th style="width:130px">Savollar soni</th><th style="width:130px">Bir savol bali</th><th style="width:60px"></th></tr></thead>
+    <tbody>
+      {% set groups = obj.groups if obj else [] %}
+      {% for g in groups %}
+      <tr><td><input type="hidden" name="g_id" value="{{ g.id }}"><input type="text" name="g_name" value="{{ g.name }}"></td>
+        <td><input type="number" name="g_count" value="{{ g.question_count }}" min="1"></td>
+        <td><input type="number" name="g_points" value="{{ g.points|num }}" step="any" min="0"></td>
+        <td><button type="button" class="btn sm danger" onclick="rmGroup(this)">✕</button></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button type="button" class="btn sm mt" onclick="addGroup()">＋ Guruh qo'shish</button>
+  <div class="help">Jami maksimal ball: <b id="groups-total">0</b></div>
+</div>
+<script>
+  function addGroup(name, cnt, pts) {
+    var tb = document.querySelector('#groups-table tbody');
+    var n = tb.rows.length + 1;
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="hidden" name="g_id" value=""><input type="text" name="g_name" value="' + (name || (n + '-guruh')) + '"></td>' +
+      '<td><input type="number" name="g_count" value="' + (cnt || 10) + '" min="1"></td>' +
+      '<td><input type="number" name="g_points" value="' + (pts || 1) + '" step="any" min="0"></td>' +
+      '<td><button type="button" class="btn sm danger" onclick="rmGroup(this)">✕</button></td>';
+    tb.appendChild(tr); calcGroups();
+  }
+  function rmGroup(b) { b.closest('tr').remove(); calcGroups(); }
+  function calcGroups() {
+    var t = 0;
+    document.querySelectorAll('#groups-table tbody tr').forEach(function (tr) {
+      var c = parseFloat(tr.querySelector('[name=g_count]').value) || 0;
+      var p = parseFloat(tr.querySelector('[name=g_points]').value) || 0;
+      t += c * p;
+    });
+    document.getElementById('groups-total').textContent = Math.round(t * 100) / 100;
+  }
+  document.getElementById('groups-table').addEventListener('input', calcGroups);
+  // Baholash usuliga qarab kerakli maydonlarni ko'rsatamiz
+  function syncMode() {
+    var m = document.getElementById('f_scoring_mode').value;
+    document.querySelectorAll('[data-group]').forEach(function (el) {
+      el.classList.toggle('hidden', el.getAttribute('data-group') !== m);
+    });
+    if (m === 'groups' && !document.querySelector('#groups-table tbody tr')) addGroup('1-guruh', 20, 1);
+  }
+  document.getElementById('f_scoring_mode').addEventListener('change', syncMode);
+  syncMode(); calcGroups();
+</script>

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager, select %}
+{% block title %}Ishtirokchilar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Ishtirokchilar</h1><div class="muted">Topildi: <b>{{ page.total }}</b></div></div>
+  <a class="btn primary" href="/admin/participants/export?{{ export_qs }}">⬇️ Excel (filtr bo'yicha)</a>
+</div>
+<form class="card filters mb" method="get">
+  <div class="grow"><label class="small">Qidiruv</label><input type="search" name="q" value="{{ f.q }}" placeholder="ID, ism, familiya yoki telefon"></div>
+  {{ select('school_id', schools, f.school_id, label='Maktab') }}
+  {{ select('grade_id', grades, f.grade_id, label='Sinf') }}
+  {{ select('subject_id', subjects, f.subject_id, label='Fan') }}
+  <div><label class="small">Holat</label><select name="status"><option value="">Barchasi</option><option value="active" {% if f.status == 'active' %}selected{% endif %}>Faol</option><option value="disqualified" {% if f.status == 'disqualified' %}selected{% endif %}>Chetlatilgan</option></select></div>
+  <div><label class="small">Davomat{% if round %} ({{ round.name }}){% endif %}</label><select name="attendance"><option value="">Barchasi</option>
+    {% for k, l in [('came', '✅ Kelganlar'), ('absent', '❌ Kelmaganlar'), ('unmarked', '❔ Belgilanmaganlar')] %}<option value="{{ k }}" {% if f.attendance == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label class="small">Til</label><select name="lang"><option value="">Barchasi</option><option value="lat" {% if f.lang == 'lat' %}selected{% endif %}>Lotin</option><option value="cyr" {% if f.lang == 'cyr' %}selected{% endif %}>Kirill</option></select></div>
+  <div><label class="small">Sanadan</label><input type="date" name="date_from" value="{{ f.date_from }}"></div>
+  <div><label class="small">Sanagacha</label><input type="date" name="date_to" value="{{ f.date_to }}"></div>
+  <div><label class="small">Tartib</label><select name="sort">
+    {% for k, l in [('new','Yangilari avval'),('old','Eskilari avval'),('name','Familiya'),('school','Maktab'),('grade','Sinf')] %}<option value="{{ k }}" {% if sort == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn primary">Filtrlash</button><a class="btn" href="/admin/participants">Tozalash</a></div>
+</form>
+<div class="table-wrap"><table>
+  <thead><tr><th>ID</th><th>Familiya Ism</th><th>Telefon</th><th>Maktab</th><th>Sinf</th><th>Fanlar</th><th>Ro'yxatdan o'tgan</th><th>Davomat</th><th>Holat</th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+  <tr class="{{ '' if p.status == 'active' else 'inactive' }}">
+    <td><b>{{ p.code }}</b></td>
+    <td><a href="/admin/participants/{{ p.id }}">{{ p.last_name }} {{ p.first_name }}</a>{% if p.bot_blocked %} <span class="badge warn" title="Botni bloklagan">🚫 bot</span>{% endif %}</td>
+    <td class="nowrap">{{ p.phone|phone }}</td>
+    <td>{{ p.school.name }}</td>
+    <td>{{ p.grade.name }}</td>
+    <td class="small">{{ p.subjects|map(attribute='name')|join(', ') }}</td>
+    <td class="small nowrap">{{ p.created_at|dt }}</td>
+    <td class="nowrap">{% if att.get(p.id) == true %}<span class="badge ok">keldi</span>{% elif att.get(p.id) == false %}<span class="badge err">kelmadi</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{% if p.status == 'active' %}<span class="badge ok">faol</span>{% else %}<span class="badge err">chetlatilgan</span>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="empty">Ishtirokchilar topilmadi</td></tr>{% endfor %}
+  </tbody></table></div>
+{{ pager(page) }}
+{% endblock %}

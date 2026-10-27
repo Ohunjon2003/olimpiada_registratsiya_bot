@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sertifikatlar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Sertifikat va diplomlar</h1><div class="muted">O'z dizayningizni yarating: fon rasmini yuklang va matnlarni sichqoncha bilan joylashtiring.</div></div>
+  <form method="post" action="/admin/certificates/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary">＋ Yangi shablon</button></form>
+</div>
+<div class="card mb">
+  <div class="btns">
+    <form method="post" action="/admin/toggle/certificates_enabled" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if setting('certificates_enabled') %}<button class="btn ok">✅ Sertifikatlar yoqilgan — o'chirish</button>{% else %}<button class="btn">⛔️ Sertifikatlar o'chirilgan — yoqish</button>{% endif %}</form>
+    <span class="muted small">O'quvchi botdagi «🎓 Sertifikat» tugmasi orqali o'zinikini oladi. Shart: sertifikatlar yoqilgan va natijalar e'lon qilingan
+      ({{ 'ha' if setting('results_published') else 'hozir yo\'q' }}).</span>
+  </div>
+</div>
+<div class="table-wrap"><table>
+  <thead><tr><th>Nomi</th><th>Kimga</th><th>Qaysi fan/blok</th><th>Tur</th><th>Holat</th><th></th></tr></thead>
+  <tbody>
+  {% for t in items %}
+  <tr class="{{ '' if t.is_active else 'inactive' }}">
+    <td><a href="/admin/certificates/{{ t.id }}"><b>{{ t.name }}</b></a></td>
+    <td>{% if t.rule == 'top' %}1–{{ t.top_n }} o'rin{% elif t.rule == 'percent' %}{{ t.min_percent|num }}% va undan yuqori{% else %}Barcha ishtirokchilar{% endif %}</td>
+    <td>{% if t.scope == 'block' %}🧩 {{ blocks[t.block_id].name if t.block_id in blocks else 'barcha bloklar' }}{% else %}{{ subjects[t.subject_id].name if t.subject_id in subjects else 'barcha fanlar' }}{% endif %}</td>
+    <td>{{ rounds[t.round_id].name if t.round_id in rounds else 'joriy tur' }}</td>
+    <td>{% if t.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge">nofaol</span>{% endif %}</td>
+    <td class="right nowrap"><a class="btn sm" href="/admin/certificates/{{ t.id }}">✏️ Dizayn</a> <a class="btn sm" href="/admin/certificates/{{ t.id }}/zip">⬇️ ZIP</a></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty">Shablonlar yo'q</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}

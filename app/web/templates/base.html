@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ setting('olympiad_name') }}{% endblock %} — boshqaruv</title>
+  <link rel="stylesheet" href="/static/app.css?v=5">
+  <script src="/static/vendor/htmx.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
+{% if user %}
+<div class="layout">
+  <aside class="side" id="side">
+    <div class="brand">🏆 <div>{{ setting('olympiad_name') }}<small>Boshqaruv paneli</small></div></div>
+    <nav class="nav">
+      {% macro nav(href, ico, label, exact=False) -%}
+        <a href="{{ href }}" class="{% if (exact and path == href) or (not exact and path.startswith(href)) %}active{% endif %}"><span class="ico">{{ ico }}</span>{{ label }}</a>
+      {%- endmacro %}
+      {% if user.is_admin %}
+        {{ nav('/admin', '📊', 'Bosh sahifa', True) }}
+        {{ nav('/admin/participants', '👥', 'Ishtirokchilar') }}
+        {{ nav('/attendance', '🙋', 'Davomat') }}
+        {{ nav('/judge/enter', '✍️', 'Ball kiritish') }}
+        {{ nav('/admin/ranking', '🏅', 'Reyting') }}
+        {{ nav('/admin/broadcasts', '📣', 'Xabar yuborish') }}
+        {{ nav('/admin/certificates', '🎓', 'Sertifikatlar') }}
+        {{ nav('/admin/appeals', '⚖️', "E'tirozlar") }}
+        <div class="nav-title">Sozlash</div>
+        {{ nav('/admin/settings', '⚙️', 'Umumiy sozlamalar') }}
+        {{ nav('/admin/texts', '💬', 'Bot matnlari') }}
+        {{ nav('/admin/c/channels', '📢', 'Kanallar') }}
+        {{ nav('/admin/c/rules', '📜', 'Nizom') }}
+        {{ nav('/admin/c/schools', '🏫', 'Maktablar') }}
+        {{ nav('/admin/c/grades', '🎒', 'Sinflar') }}
+        {{ nav('/admin/c/subjects', '📚', 'Fanlar') }}
+        {{ nav('/admin/c/blocks', '🧩', 'Bloklar') }}
+        {{ nav('/admin/c/rounds', '🔁', 'Turlar') }}
+        {{ nav('/admin/c/questions', '❓', "Qo'shimcha savollar") }}
+        {{ nav('/admin/users', '🧑‍⚖️', 'Hakamlar va adminlar') }}
+        <div class="nav-title">Tizim</div>
+        {{ nav('/admin/audit', '🧾', 'Jurnal') }}
+        {{ nav('/admin/backups', '💾', 'Zaxira nusxalar') }}
+        {{ nav('/admin/notify', '🔔', 'Telegram xabarnomalar') }}
+        {{ nav('/admin/archive', '🗄', 'Arxiv va tozalash') }}
+      {% else %}
+        {{ nav('/judge', '🏠', 'Bosh sahifa', True) }}
+        {% if setting('judges_attendance') %}{{ nav('/attendance', '🙋', 'Davomat') }}{% endif %}
+        {{ nav('/judge/enter', '✍️', 'Ball kiritish') }}
+      {% endif %}
+      <div class="nav-title">Hisob</div>
+      {{ nav('/account', '🔑', 'Parolni almashtirish') }}
+    </nav>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <button class="menu-btn" onclick="document.getElementById('side').classList.toggle('open')" aria-label="Menyu">☰</button>
+      <div class="muted small">{% block crumbs %}{% endblock %}</div>
+      <div class="who">
+        <span><b>{{ user.full_name or user.username }}</b> <span class="badge {{ 'blue' if user.is_admin else '' }}">{{ 'admin' if user.is_admin else 'hakam' }}</span></span>
+        <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Chiqish</button></form>
+      </div>
+    </header>
+    <main class="content">
+      {% for kind, msg in flashes %}<div class="alert {{ kind }}">{{ msg }}</div>{% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+  {% block bare %}{% endblock %}
+{% endif %}
+<script>
+  // HTMX: server xatosi bo'lsa foydalanuvchiga ko'rsatamiz
+  document.body.addEventListener('htmx:responseError', function (e) {
+    var t = e.detail.xhr.responseText || '';
+    try { t = JSON.parse(t).detail || t; } catch (_) {}
+    alert('Xatolik: ' + (t.length > 300 ? e.detail.xhr.status : t));
+  });
+  // Tasdiqlash so'raladigan formalar
+  document.addEventListener('submit', function (e) {
+    var m = e.target.getAttribute('data-confirm');
+    if (m && !confirm(m)) e.preventDefault();
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
