@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Titulni to'ldirish qo'llanmasi{% endblock %}
+{% block bare %}
+<div class="guide-wrap">
+  <div class="center mb"><div style="font-size:34px">📝</div>
+    <h1>Titulni to'g'ri to'ldirish</h1>
+    <div class="muted">{{ olympiad }}</div></div>
+  <div class="btns center-btns mb">
+    <a class="btn primary" href="/qollanma.pdf">⬇️ PDF yuklab olish</a>
+    <a class="btn" href="/qollanma.png" download="titul-qollanma.png">🖼 Rasm (PNG)</a>
+  </div>
+  <a href="/qollanma.png" target="_blank"><img src="/qollanma.png" alt="Titulni to'ldirish qo'llanmasi" class="guide-img"></a>
+  <div class="card mt">
+    <h3>Qisqacha</h3>
+    <ol class="steps">
+      <li>Titulning tepasidagi <b>ID, xona va o'rin</b> sizniki ekanini tekshiring.</li>
+      <li>O'z <b>ID raqamingizni</b> kataklarga yozing va har ustunda bitta doirachani bo'yang.</li>
+      <li>Har savolga <b>faqat bitta</b> doirachani to'liq bo'yang (ikkita belgi — xato).</li>
+      <li>QR kodga va burchaklardagi qora kvadratlarga tegmang, titulni bukmang.</li>
+    </ol>
+  </div>
+</div>
+{% endblock %}
+{% block head %}<style>
+  body { background: var(--bg); }
+  .guide-wrap { max-width: 760px; margin: 0 auto; padding: 22px 14px calc(30px + env(safe-area-inset-bottom)); }
+  .guide-img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; display: block; box-shadow: var(--shadow); }
+  .center-btns { justify-content: center; }
+</style>{% endblock %}

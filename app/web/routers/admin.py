@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import config
 from ...db import get_session
-from ...models import (Attendance, AuditLog, Broadcast, Channel, Grade, Participant,
+from ...models import (Attendance, Round, AuditLog, Broadcast, Channel, Grade, Participant,
                        Result, School, SeatAssignment, SheetScan, Subject, User,
                        participant_subjects)
 from ...security import hash_password, password_problem
@@ -86,6 +86,45 @@ async def dashboard(request: Request, user: User = Depends(require_admin),
         "progress": progress, "round": cur, "channels_n": channels_n,
         "channel_errors": _channel_errors(),
     })
+
+
+@router.get("/help")
+async def help_page(request: Request, user: User = Depends(require_admin)):
+    """Admin uchun qadamma-qadam qo'llanma va tez-tez so'raladigan savollar."""
+    return render(request, "admin/help.html", {})
+
+
+def _safe_back(back: str | None, default: str) -> str:
+    """Faqat sayt ichidagi yo'lga qaytaramiz (open-redirect bo'lmasin)."""
+    if back and back.startswith("/") and not back.startswith("//") and "\\" not in back:
+        return back
+    return default
+
+
+@router.post("/lock/{kind}/{obj_id}")
+async def toggle_lock(kind: str, obj_id: int, request: Request, user: User = Depends(require_admin),
+                      session: AsyncSession = Depends(get_session)):
+    """Fan yoki turni qulflash / ochish (qulflangach ball kiritib va skaner qilib bo'lmaydi)."""
+    form = await request.form()
+    back = _safe_back(form.get("back"), "/admin")
+    if kind == "subject":
+        obj = await session.get(Subject, obj_id)
+        title = f"«{obj.name}» fani" if obj else ""
+    elif kind == "round":
+        obj = await session.get(Round, obj_id)
+        title = f"«{obj.name}»" if obj else ""
+    else:
+        raise HTTPException(404)
+    if obj is None:
+        raise HTTPException(404)
+    obj.is_locked = not obj.is_locked
+    state = "qulflandi" if obj.is_locked else "ochildi"
+    audit.log(session, user, "update", kind, obj.id, f"{title} natijalari {state}", ip=client_ip(request))
+    await session.commit()
+    ranking.invalidate()
+    flash(request, f"🔒 {title} natijalari qulflandi." if obj.is_locked
+          else f"🔓 {title} natijalari ochildi — endi ball kiritish va skaner qilish mumkin.")
+    return RedirectResponse(back, 303)
 
 
 async def _count(session: AsyncSession, stmt) -> int:

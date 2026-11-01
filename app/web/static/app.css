@@ -351,3 +351,136 @@ details.inline-edit[open] > form:first-of-type { min-width: 300px; }
 .flow-step.done .dot { background: #22c55e; color: #fff; }
 .flow-step.doing { background: #eff6ff; border-color: #bfdbfe; }
 .flow-step.doing .dot { background: #2453d6; color: #fff; }
+
+/* Qulf bannerlari */
+.lockbox { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lockline { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 2px 0; }
+
+/* ======================================================================
+   Mobil ilova ko'rinishi (PWA): pastki menyu, drawer, kartochkali jadvallar
+   ====================================================================== */
+.backdrop, .tabbar, .drawer-user, .drawer-logout, .app-title, .avatar-btn { display: none; }
+.quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.quick a { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; background: var(--panel);
+           border: 1px solid var(--line); border-radius: 12px; color: var(--ink); font-weight: 600; font-size: 13px; box-shadow: var(--shadow); text-align: center; }
+.quick a:hover { text-decoration: none; border-color: var(--brand); background: var(--brand-soft); }
+.quick i { font-style: normal; font-size: 24px; line-height: 1.1; }
+
+@media (max-width: 900px) {
+  :root { --tab-h: 58px; --top-h: 52px; }
+  body { padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+  body.noscroll { overflow: hidden; }
+  /* yuqori panel: ilova sarlavhasi + profil */
+  .top { padding: calc(6px + env(safe-area-inset-top)) 14px 6px; min-height: var(--top-h); }
+  .menu-btn, .top .who, .crumbs { display: none; }
+  .app-title { display: block; font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .avatar-btn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--brand); color: #fff; font: 700 15px var(--font); }
+  /* drawer */
+  .side { left: -100%; width: min(86vw, 330px); height: 100dvh; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 60; }
+  .side.open { left: 0; }
+  .backdrop { z-index: 55; }
+  .backdrop.show { display: block; position: fixed; inset: 0; background: rgba(15, 23, 42, .55); }
+  .brand { display: none; }
+  .drawer-user { display: flex; align-items: center; gap: 10px; color: #fff; padding: 4px 6px 14px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .drawer-user .avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--brand); display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+  .drawer-x { margin-left: auto; background: rgba(255,255,255,.1); color: #fff; border: 0; border-radius: 50%; width: 34px; height: 34px; font-size: 15px; }
+  .nav a { padding: 12px 10px; font-size: 15px; }
+  .drawer-logout { display: block; margin-top: 18px; }
+  /* pastki menyu */
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: #fff; border-top: 1px solid var(--line);
+            height: calc(var(--tab-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -2px 12px rgba(16,24,40,.06); }
+  .tabbar a, .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative;
+            color: var(--muted); background: none; border: 0; font: 500 11px var(--font); text-decoration: none; min-width: 0; }
+  .tabbar i { font-style: normal; font-size: 22px; line-height: 1; }
+  .tabbar .on { color: var(--brand); font-weight: 700; }
+  .tabbar .on::before { content: ""; position: absolute; top: 0; width: 30px; height: 3px; border-radius: 0 0 4px 4px; background: var(--brand); }
+  /* kontent */
+  .content { padding: 14px 12px 24px; }
+  h1 { font-size: 20px; }
+  .card { padding: 14px; border-radius: 12px; }
+  .page-head { align-items: stretch; margin-bottom: 12px; }
+  .page-head > .btns, .page-head > a.btn { width: 100%; }
+  .page-head .btns .btn { flex: 1; justify-content: center; }
+  .btn { min-height: 42px; padding: 9px 14px; }
+  .btn.sm { min-height: 36px; }
+  input[type=text], input[type=password], input[type=number], input[type=url], input[type=search],
+  input[type=datetime-local], input[type=date], select, textarea { font-size: 16px; padding: 10px 12px; min-height: 44px; }
+  .filters > *, .filters .grow { flex: 1 1 calc(50% - 8px); max-width: none; }
+  .filters .grow { flex-basis: 100%; }
+  .filters .btns { flex-basis: 100%; }
+  .filters .btns .btn { flex: 1; justify-content: center; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs a { white-space: nowrap; flex: 0 0 auto; }
+  .stat .v { font-size: 22px; }
+  .quick { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .quick a { padding: 10px 2px; font-size: 11.5px; }
+  .kv { grid-template-columns: 1fr; gap: 0; } .kv dd { margin-bottom: 8px; }
+  .emoji-pop { bottom: calc(var(--tab-h) + 14px + env(safe-area-inset-bottom)); }
+  .texts-bar { top: var(--top-h); }
+  .chart-box { height: 220px; }
+}
+
+/* Jadvallar telefonda kartochka ko'rinishida */
+@media (max-width: 700px) {
+  .table-wrap { border: 0; background: none; overflow: visible; border-radius: 0; }
+  table.rc, table.rc tbody { display: block; }
+  table.rc thead { display: none; }
+  table.rc tr { display: block; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  table.rc tbody tr:hover { background: #fff; }
+  table.rc td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border: 0; border-bottom: 1px dashed var(--line);
+                text-align: right; min-height: 32px; background: transparent !important; word-break: break-word; }
+  table.rc td:last-child { border-bottom: 0; }
+  table.rc td::before { content: attr(data-label); color: var(--muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; text-align: left; flex: 0 0 34%; }
+  table.rc td[data-label=""] { justify-content: flex-end; flex-wrap: wrap; }
+  table.rc td[data-label=""]::before { display: none; }
+  table.rc td:empty { display: none; }
+  table.rc td[colspan] { display: block; text-align: center; }
+  table.rc td[colspan]::before { display: none; }
+  table.rc tr.place-1 { background: #fff8db; } table.rc tr.place-2 { background: #f4f5f7; } table.rc tr.place-3 { background: #fbeee0; }
+  table.rc tr.inactive { opacity: .65; }
+  .enter input.score { width: 84px; font-size: 18px; }
+  .pager a, .pager span { padding: 9px 13px; }
+  .progress { min-width: 120px; }
+}
+.fold-box, .fold-btn { display: none; }
+@media (max-width: 700px) {
+  form.filters .fold-btn { display: inline-flex; flex: 1 1 100%; justify-content: center; }
+  form.filters .fold-box { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; max-width: none; }
+  form.filters .fold-box[hidden] { display: none; }
+  form.filters .fold-box > * { flex: 1 1 calc(50% - 8px); max-width: none; }
+  .grid.g4:has(> .stat) { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
+/* Ball kiritish: telefonda ixcham kartochka (ID · ism · sinf bir qatorda) */
+@media (max-width: 700px) {
+  .enter table.rc tr { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
+  .enter table.rc td { flex: 1 1 100%; }
+  .enter table.rc td[data-label="ID"], .enter table.rc td[data-label="Ishtirokchi"], .enter table.rc td[data-label="Sinf"] {
+    flex: 0 1 auto; border-bottom: 0; padding: 4px 0; justify-content: flex-start; text-align: left; }
+  .enter table.rc td[data-label="ID"]::before, .enter table.rc td[data-label="Ishtirokchi"]::before, .enter table.rc td[data-label="Sinf"]::before { display: none; }
+  .enter table.rc td[data-label="ID"] { font-weight: 700; font-size: 16px; }
+  .enter table.rc td[data-label="Sinf"]::after { content: "-sinf"; color: var(--muted); }
+}
+@media (max-width: 700px) {
+  .enter table.rc td[data-label="Sinf"] { gap: 0; }
+  .enter table.rc td[data-label="Ball"], .enter table.rc td[data-label="Foiz"] { flex: 1 1 40%; }
+  .enter table.rc td[data-label="Ball"]::before, .enter table.rc td[data-label="Foiz"]::before { flex-basis: auto; }
+}
+.guide-row { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: start; }
+.guide-thumb { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+@media (max-width: 700px) { .guide-row { grid-template-columns: 1fr; } .guide-thumb { max-width: 220px; } }
+
+/* Yordam sahifasi */
+.how h3 { margin: 18px 0 8px; color: var(--brand); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+.how h3:first-child { margin-top: 0; }
+.how-step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.how-step:last-child { border-bottom: 0; }
+.how-n { flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.mt-s { margin-top: 8px; }
+.faq { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff; }
+.faq > summary { padding: 12px 14px; cursor: pointer; font-weight: 600; list-style: none; }
+.faq > summary::-webkit-details-marker { display: none; }
+.faq > summary::after { content: "▾"; float: right; color: var(--muted); }
+.faq[open] > summary { border-bottom: 1px solid var(--line); }
+.faq[open] > summary::after { content: "▴"; }
+.faq-body { padding: 4px 14px 10px; font-size: 13.5px; }
+.faq-body ol, .faq-body ul { padding-left: 20px; }

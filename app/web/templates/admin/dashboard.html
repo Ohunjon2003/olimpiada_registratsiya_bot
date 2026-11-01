@@ -16,6 +16,17 @@
   </div>
 </div>
 
+<div class="quick">
+  <a href="/attendance"><i>🙋</i>Davomat</a>
+  <a href="/scan"><i>📷</i>Skaner</a>
+  <a href="/admin/omr?tab=review"><i>🔎</i>Tekshirish</a>
+  <a href="/admin/ranking"><i>🏅</i>Reyting</a>
+  <a href="/admin/seating"><i>🪑</i>Joylashtirish</a>
+  <a href="/admin/omr?tab=print"><i>🖨</i>Titul chop</a>
+  <a href="/admin/broadcasts"><i>📣</i>Xabar</a>
+  <a href="/admin/help"><i>❓</i>Qo'llanma</a>
+</div>
+
 {% for cid, when, err in channel_errors %}
 <div class="alert error">⚠️ Bot <b>{{ cid }}</b> kanaliga obunani tekshira olmadi ({{ when }}): <code>{{ err }}</code><br>
   O'quvchilar to'xtab qolmasligi uchun bu kanal vaqtincha tekshirilmayapti. Botni kanalga <b>admin</b> qiling va
@@ -59,10 +70,19 @@
       {% set pct = (p.entered / p.total * 100) if p.total else 0 %}
       <tr><td><b>{{ p.subject.name }}</b> {% if p.subject.is_locked %}🔒{% endif %}</td><td>{{ p.total }}</td><td>{{ p.entered }}</td>
         <td><div class="progress"><div style="width:{{ pct|round(1) }}%"></div></div><span class="small muted">{{ pct|round(1) }}%</span></td>
-        <td class="right"><a class="btn sm" href="/judge/enter?subject_id={{ p.subject.id }}">Kiritish</a> <a class="btn sm" href="/admin/ranking?target=s:{{ p.subject.id }}">Reyting</a></td></tr>
+        <td class="right"><a class="btn sm" href="/judge/enter?subject_id={{ p.subject.id }}">Kiritish</a> <a class="btn sm" href="/admin/ranking?target=s:{{ p.subject.id }}">Reyting</a>
+          <form method="post" action="/admin/lock/subject/{{ p.subject.id }}" class="inline" data-confirm="{{ ('«' ~ p.subject.name ~ '» ochilsinmi? Hakamlar yana ball o\'zgartira oladi.') if p.subject.is_locked else ('«' ~ p.subject.name ~ '» qulflansinmi? Hakamlar ball o\'zgartira olmaydi.') }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/admin">
+            <button class="btn sm {{ 'primary' if p.subject.is_locked else '' }}">{{ '🔓 Ochish' if p.subject.is_locked else '🔒 Qulflash' }}</button></form></td></tr>
     {% endfor %}
     </tbody></table></div>
   {% else %}<div class="empty">Hali fan tanlagan ishtirokchilar yo'q.</div>{% endif %}
+  {% if round %}
+  <div class="lockline">
+    {% if round.is_locked %}<span>🔒 <b>{{ round.name }}</b> to'liq qulflangan — hech bir fanga ball kiritib bo'lmaydi.</span>
+      <form method="post" action="/admin/lock/round/{{ round.id }}" class="inline" data-confirm="{{ round.name }} turini ochaymi?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/admin"><button class="btn sm primary">🔓 Turni ochish</button></form>
+    {% else %}<span class="muted small">🔒 Qulf — natijalar yakunlangach hakamlar tasodifan o'zgartirmasligi uchun. Fan yoki butun turni qulflash mumkin; istalgan vaqt ochiladi.</span>{% endif %}
+  </div>{% endif %}
 </div>
 {% endblock %}
 {% block scripts %}

@@ -1,18 +1,31 @@
 <!doctype html>
 <html lang="uz">
 <head>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2453d6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Olimpiada">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/static/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <title>{% block title %}{{ setting('olympiad_name') }}{% endblock %} — boshqaruv</title>
-  <link rel="stylesheet" href="/static/app.css?v=9">
+  <link rel="stylesheet" href="/static/app.css?v=10">
   <script src="/static/vendor/htmx.min.js"></script>
   {% block head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
 {% if user %}
 <div class="layout">
+  <div class="backdrop" id="backdrop" onclick="closeMenu()"></div>
   <aside class="side" id="side">
+    <div class="drawer-user">
+      <div class="avatar">{{ (user.full_name or user.username)[:1]|upper }}</div>
+      <div><b>{{ user.full_name or user.username }}</b><br><span class="badge {{ 'blue' if user.is_admin else '' }}">{{ 'admin' if user.is_admin else 'hakam' }}</span></div>
+      <button class="drawer-x" type="button" onclick="closeMenu()" aria-label="Yopish">✕</button>
+    </div>
     <div class="brand">🏆 <div>{{ setting('olympiad_name') }}<small>Boshqaruv paneli</small></div></div>
     <nav class="nav">
       {% macro nav(href, ico, label, exact=False) -%}
@@ -48,6 +61,8 @@
         {{ nav('/admin/backups', '💾', 'Zaxira nusxalar') }}
         {{ nav('/admin/notify', '🔔', 'Telegram xabarnomalar') }}
         {{ nav('/admin/archive', '🗄', 'Arxiv va tozalash') }}
+        <div class="nav-title">Yordam</div>
+        {{ nav('/admin/help', '❓', "Qo'llanma (qadamma-qadam)") }}
       {% else %}
         {{ nav('/judge', '🏠', 'Bosh sahifa', True) }}
         {% if setting('judges_attendance') %}{{ nav('/attendance', '🙋', 'Davomat') }}{% endif %}
@@ -56,13 +71,16 @@
       {% endif %}
       <div class="nav-title">Hisob</div>
       {{ nav('/account', '🔑', 'Parolni almashtirish') }}
+      <form method="post" action="/logout" class="drawer-logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" style="width:100%;justify-content:center">Chiqish</button></form>
     </nav>
   </aside>
   <div class="main">
     <header class="top">
-      <button class="menu-btn" onclick="document.getElementById('side').classList.toggle('open')" aria-label="Menyu">☰</button>
-      <div class="muted small">{% block crumbs %}{% endblock %}</div>
-      <div class="who">
+      <button class="menu-btn" onclick="openMenu()" aria-label="Menyu">☰</button>
+      <div class="app-title">🏆 {{ setting('olympiad_name') }}</div>
+      <div class="crumbs muted small">{% block crumbs %}{% endblock %}</div>
+      <button class="avatar-btn" type="button" onclick="openMenu()" aria-label="Profil va menyu">{{ (user.full_name or user.username)[:1]|upper }}</button>
+      <div class="who" id="who">
         <span><b>{{ user.full_name or user.username }}</b> <span class="badge {{ 'blue' if user.is_admin else '' }}">{{ 'admin' if user.is_admin else 'hakam' }}</span></span>
         <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Chiqish</button></form>
       </div>
@@ -73,10 +91,70 @@
     </main>
   </div>
 </div>
+{% macro tab(href, ico, label, exact=False) -%}
+  <a href="{{ href }}" class="{% if (exact and path == href) or (not exact and path.startswith(href)) %}on{% endif %}"><i>{{ ico }}</i><span>{{ label }}</span></a>
+{%- endmacro %}
+<nav class="tabbar" aria-label="Asosiy menyu">
+  {% if user.is_admin %}
+    {{ tab('/admin', '📊', 'Bosh', True) }}
+    {{ tab('/admin/participants', '👥', "O'quvchilar") }}
+    {{ tab('/judge/enter', '✍️', 'Ball') }}
+    {{ tab('/scan', '📷', 'Skaner') }}
+  {% else %}
+    {{ tab('/judge', '🏠', 'Bosh', True) }}
+    {% if setting('judges_attendance') %}{{ tab('/attendance', '🙋', 'Davomat') }}{% endif %}
+    {{ tab('/judge/enter', '✍️', 'Ball') }}
+    {{ tab('/scan', '📷', 'Skaner') }}
+  {% endif %}
+  <button type="button" onclick="openMenu()"><i>☰</i><span>Menyu</span></button>
+</nav>
 {% else %}
   {% block bare %}{% endblock %}
 {% endif %}
 <script>
+  // Telefon menyusi (drawer)
+  function openMenu() { var s = document.getElementById('side'); if (s) { s.classList.add('open'); document.getElementById('backdrop').classList.add('show'); document.body.classList.add('noscroll'); } }
+  function closeMenu() { var s = document.getElementById('side'); if (s) { s.classList.remove('open'); document.getElementById('backdrop').classList.remove('show'); document.body.classList.remove('noscroll'); } }
+  document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('#side .nav a')) closeMenu(); });
+  // Jadval kataklariga sarlavha yozamiz: telefonda har qator «kartochka»ga aylanadi
+  function labelTables(root) {
+    (root || document).querySelectorAll('.table-wrap table:not(.keep)').forEach(function (t) {
+      var heads = t.querySelectorAll('thead th'); if (!heads.length) return;
+      t.classList.add('rc');
+      var names = Array.prototype.map.call(heads, function (h) { return h.textContent.trim(); });
+      t.querySelectorAll('tbody tr').forEach(function (tr) {
+        var i = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          if (td.tagName === 'TD' && !td.hasAttribute('data-label')) td.setAttribute('data-label', names[i] || '');
+          i += td.colSpan || 1;
+        });
+      });
+    });
+  }
+  labelTables();
+  // Telefonda filtrlar yig'iladi: qidiruv doim ko'rinadi, qolganlari «Filtrlar» tugmasi ostida
+  function foldFilters() {
+    if (!window.matchMedia('(max-width:700px)').matches) return;
+    document.querySelectorAll('form.filters').forEach(function (f) {
+      if (f.dataset.fold) return; f.dataset.fold = '1';
+      var kids = Array.prototype.slice.call(f.children);
+      var rest = kids.filter(function (c) { return !c.classList.contains('grow') && !c.classList.contains('btns') && !c.hasAttribute('data-keep'); });
+      if (rest.length < 2) return;
+      var box = document.createElement('div'); box.className = 'fold-box';
+      var used = 0;
+      rest.forEach(function (c) { box.appendChild(c); c.querySelectorAll('input,select').forEach(function (x) { if (x.type === 'hidden') return; if (x.tagName === 'SELECT' ? x.selectedIndex > 0 : !!x.value) used++; }); });
+      var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn fold-btn';
+      var open = used > 0; box.hidden = !open;
+      function label() { btn.textContent = '⚙️ Filtrlar' + (used ? ' (' + used + ')' : '') + (box.hidden ? ' ▾' : ' ▴'); }
+      btn.onclick = function () { box.hidden = !box.hidden; label(); }; label();
+      var anchor = f.querySelector('.btns');
+      f.insertBefore(box, anchor); f.insertBefore(btn, box);
+    });
+  }
+  foldFilters();
+  document.body.addEventListener('htmx:afterSwap', function (e) { labelTables(document); });
+  // PWA: service worker
+  if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
   // HTMX: server xatosi bo'lsa foydalanuvchiga ko'rsatamiz
   document.body.addEventListener('htmx:responseError', function (e) {
     var t = e.detail.xhr.responseText || '';

@@ -15,9 +15,28 @@
   </div>
   {% if user.is_admin %}<a class="btn" href="/admin/ranking?target=s:{{ subject.id }}&round_id={{ round.id }}">🏅 Reyting</a>{% endif %}
 </div>
-{% if locked %}<div class="alert warn">🔒 Bu fan yoki tur natijalari qulflangan — o'zgartirib bo'lmaydi.</div>{% endif %}
+{% if locked %}
+<div class="alert warn lockbox">
+  <div><b>🔒 Natijalar qulflangan — ball kiritib bo'lmaydi.</b>
+    <div class="small">
+      {% if subject.is_locked %}«{{ subject.name }}» fani qulflangan. {% endif %}{% if round.is_locked %}«{{ round.name }}» turi qulflangan. {% endif %}
+      {% if user.is_admin %}Pastdagi tugma bilan ochasiz, keyin hakamlar yana ball kirita oladi.{% else %}Ochish uchun adminga murojaat qiling.{% endif %}</div></div>
+  {% if user.is_admin %}
+  <div class="btns">
+    {% if subject.is_locked %}<form method="post" action="/admin/lock/subject/{{ subject.id }}" class="inline" data-confirm="«{{ subject.name }}» fanini ochaymi? Hakamlar yana ball o'zgartira oladi.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ request.url.path }}?{{ request.url.query }}">
+      <button class="btn primary">🔓 «{{ subject.name }}» fanini ochish</button></form>{% endif %}
+    {% if round.is_locked %}<form method="post" action="/admin/lock/round/{{ round.id }}" class="inline" data-confirm="«{{ round.name }}» turini ochaymi? Barcha fanlar uchun ball kiritish ochiladi.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ request.url.path }}?{{ request.url.query }}">
+      <button class="btn primary">🔓 «{{ round.name }}» turini ochish</button></form>{% endif %}
+  </div>{% endif %}
+</div>
+{% elif user.is_admin %}
+<div class="muted small mb">Ball kiritib bo'lgach: <form method="post" action="/admin/lock/subject/{{ subject.id }}" class="inline" data-confirm="«{{ subject.name }}» natijalarini qulflaymi? Hakamlar o'zgartira olmaydi.">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="{{ request.url.path }}?{{ request.url.query }}"><button class="btn sm">🔒 shu fanni qulflash</button></form></div>
+{% endif %}
 <form class="card filters mb no-print" method="get">
-  <div><label class="small">Fan</label><select name="subject_id" onchange="this.form.submit()">{% for s in subjects %}<option value="{{ s.id }}" {% if s.id == subject.id %}selected{% endif %}>{{ s.name }}{% if s.is_locked %} 🔒{% endif %}</option>{% endfor %}</select></div>
+  <div data-keep><label class="small">Fan</label><select name="subject_id" onchange="this.form.submit()">{% for s in subjects %}<option value="{{ s.id }}" {% if s.id == subject.id %}selected{% endif %}>{{ s.name }}{% if s.is_locked %} 🔒{% endif %}</option>{% endfor %}</select></div>
   {% if rounds %}<div><label class="small">Tur</label><select name="round_id">{% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}{{ ' (joriy)' if r.is_current }}</option>{% endfor %}</select></div>{% endif %}
   <div><label class="small">Sinf</label><select name="grade_id"><option value="">Barchasi</option>{% for g in grades %}<option value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></div>
   {% if names %}<div><label class="small">Maktab</label><select name="school_id"><option value="">Barchasi</option>{% for s in schools %}<option value="{{ s.id }}" {% if params.get('school_id') == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>{% endif %}

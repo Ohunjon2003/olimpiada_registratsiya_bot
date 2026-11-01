@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Qo'llanma{% endblock %}
+{% block crumbs %}Qo'llanma{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>❓ Qo'llanma</h1>
+  <div class="muted">Olimpiadani boshdan oxirigacha o'tkazish tartibi va tez-tez so'raladigan savollar. Har qadamdagi tugma kerakli sahifaga olib boradi.</div></div></div>
+
+<div class="card mb">
+  <h2>🧭 Olimpiada tartibi — qadamma-qadam</h2>
+  <div class="how">
+    {% macro st(n, title, body, links) %}
+    <div class="how-step"><span class="how-n">{{ n }}</span>
+      <div><b>{{ title }}</b><div class="small muted">{{ body }}</div>
+        <div class="btns mt-s">{% for href, label in links %}<a class="btn sm" href="{{ href }}">{{ label }}</a>{% endfor %}</div></div></div>
+    {% endmacro %}
+    <h3>Tayyorgarlik</h3>
+    {{ st(1, "Asosiy ma'lumotlar", "Maktablar, sinflar, fanlar (savollar soni va ball), bloklar va turlarni kiriting.", [("/admin/c/schools","🏫 Maktablar"),("/admin/c/grades","🎒 Sinflar"),("/admin/c/subjects","📚 Fanlar"),("/admin/c/rounds","🔁 Turlar")]) }}
+    {{ st(2, "Kanallar va nizom", "Obuna bo'lish shart bo'lgan kanallar va olimpiada nizomi.", [("/admin/c/channels","📢 Kanallar"),("/admin/c/rules","📜 Nizom")]) }}
+    {{ st(3, "Hakamlar", "Har hakamga login/parol bering va fanini biriktiring. Hakam faqat o'z fanini ko'radi.", [("/admin/users","🧑‍⚖️ Hakamlar va adminlar")]) }}
+    {{ st(4, "Ro'yxatdan o'tish", "Ochilish/yopilish vaqtini belgilang. Bot orqali o'quvchilar o'zlari ro'yxatdan o'tadi. Kuzatish: «Bosh sahifa».", [("/admin/settings","⚙️ Sozlamalar"),("/admin/participants","👥 Ishtirokchilar")]) }}
+    <h3>Ro'yxat yopilgach</h3>
+    {{ st(5, "Joylashtirish", "Binolar → xonalar → smenalar yarating, so'ng «Taqsimlash» — o'quvchilar smena, xona va o'rinlarga avtomatik joylashadi (bir maktab yonma-yon o'tirmaydi).", [("/admin/seating","🪑 Joylashtirish")]) }}
+    {{ st(6, "Ruxsatnomalar", "Dizaynni tekshiring va olimpiadadan bir kun oldingi soatga rejalashtiring. O'quvchi botdan ham oladi.", [("/admin/seating?tab=plan","🎫 Ruxsatnoma")]) }}
+    {{ st(7, "Titullar (ixtiyoriy)", "Avtomatik tekshiruv uchun: fanda yoqing → chop eting → o'quvchilarga qo'llanmani ko'rsating.", [("/admin/omr","📝 Titul va skaner"),("/admin/omr?tab=print","🖨 Chop etish"),("/qollanma","🎓 O'quvchi qo'llanmasi")]) }}
+    <h3>Olimpiada kuni</h3>
+    {{ st(8, "Davomat", "Kirishda «Keldi» belgilang. Xona/smena bo'yicha filtrlang.", [("/attendance","🙋 Davomat")]) }}
+    {{ st(9, "Tekshirish", "Titullar: hakamlar telefonda skaner qiladi. Qo'lda: «Ball kiritish». Boshqa kompyuter/telefondan bir vaqtda ishlash mumkin.", [("/scan","📷 Skaner"),("/judge/enter","✍️ Ball kiritish"),("/admin/omr?tab=review","🔎 Tekshirish kerak")]) }}
+    <h3>Natijalar</h3>
+    {{ st(10, "Reyting va qulflash", "Barcha ballar kiritilgach fanni yoki turni 🔒 qulflang — hakamlar tasodifan o'zgartirmasin. Kerak bo'lsa 🔓 ochiladi.", [("/admin","📊 Bosh sahifa"),("/admin/ranking","🏅 Reyting")]) }}
+    {{ st(11, "Natijalar va sertifikatlar", "Natijalarni e'lon qiling, o'rinlarni tekshiring, sertifikatlarni botga yuboring.", [("/admin/awards","🏅 O'rinlar"),("/admin/certificates","🎓 Sertifikatlar"),("/admin/broadcasts","📣 Xabar yuborish")]) }}
+    {{ st(12, "Arxiv", "Hammasini Excel'ga saqlang, keyin yangi olimpiada uchun tozalang.", [("/admin/archive","🗄 Arxiv va tozalash")]) }}
+  </div>
+</div>
+
+<div class="card mb">
+  <h2>📱 Telefonda ilova sifatida o'rnatish</h2>
+  <p class="small">Panelni telefonning bosh ekraniga qo'shsangiz — alohida ilova kabi (manzil satrisiz, to'liq ekranda) ochiladi.</p>
+  <ul class="small">
+    <li><b>iPhone (Safari):</b> pastdagi «Ulashish» tugmasi → <b>«Bosh ekranga qo'shish»</b>.</li>
+    <li><b>Android (Chrome):</b> yuqoridagi ⋮ menyu → <b>«Ilovani o'rnatish»</b> yoki «Bosh ekranga qo'shish».</li>
+  </ul>
+  <p class="small muted">Jonli kamera (skaner) va o'rnatish uchun sayt <b>HTTPS</b> (domen) bilan ochilgan bo'lishi kerak. Pastki menyuda: Bosh · O'quvchilar · Ball · Skaner · Menyu.</p>
+</div>
+
+<div class="card">
+  <h2>💡 Tez-tez so'raladigan savollar</h2>
+  {% macro q(title) %}<details class="faq"><summary>{{ title }}</summary><div class="faq-body">{{ caller() }}</div></details>{% endmacro %}
+
+  {% call q("🔒 «Natijalar qulflangan» deyapti — ball kiritish qanday ochiladi?") %}
+    <p>Qulf ikki xil: <b>fan qulfi</b> (bitta fan) va <b>tur qulfi</b> (butun tur, barcha fanlar). Qaysi biri yoqilgani «Ball kiritish» sahifasi tepasida yozilgan va o'sha yerda <b>«🔓 Ochish»</b> tugmasi bor.</p>
+    <ol><li><b>Bosh sahifa</b> → «Natijalar kiritilishi» jadvali → kerakli fan qatoridagi <b>🔓 Ochish</b> tugmasi.</li>
+      <li>Yoki «Ball kiritish» sahifasida tepadagi sariq quti ichidagi <b>🔓 «…» fanini ochish</b> / <b>turini ochish</b>.</li>
+      <li>Butun tur qulflangan bo'lsa (Bosh sahifa pastida yoki «O'rinlar va mukofotlar»da) — <b>🔓 Turni ochish</b>.</li></ol>
+    <p>Ochgach hakamlar yana ball kiritishi va titullarni skaner qilishi mumkin. Yakunlagach yana <b>🔒 Qulflash</b> ni bosing. Har qulflash/ochish «Jurnal»da yoziladi.</p>
+  {% endcall %}
+  {% call q("Qulfni nima uchun ishlataman?") %}
+    <p>Natijalar yakuniy bo'lgach, hakam tasodifan ball o'zgartirib yubormasligi va reytingdagi o'rinlar turg'un bo'lishi uchun. Sertifikatlarni yuborishdan oldin turni qulflash tavsiya etiladi.</p>
+  {% endcall %}
+  {% call q("Ballni xato kiritibman. Qanday tuzataman?") %}
+    <p>Fan qulflanmagan bo'lsa — «Ball kiritish»da shu o'quvchini toping va to'g'ri qiymatni yozib «Saqlash»ni bosing. Qulflangan bo'lsa avval oching (yuqoriga qarang). Titul orqali kiritilgan bo'lsa: «📝 Titul va skaner → Ishlar» dan o'sha ishni oching va javoblarni tahrirlang.</p>
+  {% endcall %}
+  {% call q("Titul boshqa o'quvchiga berilib qolsa nima bo'ladi?") %}
+    <p>Tizim uch qavat himoyalaydi: titullar xona va o'rin tartibida chop etiladi; o'quvchi o'z <b>ID</b> sini belgilaydi; skaner QR dagi ID bilan solishtiradi. Mos kelmasa natija yozilmaydi va ish <b>🔎 Tekshirish kerak</b> ga tushadi — rasmni ko'rib, to'g'ri o'quvchiga yozasiz.</p>
+  {% endcall %}
+  {% call q("Telefonda skaner kamerani ochmayapti") %}
+    <p>1) Sayt <b>https://</b> bilan ochilganini tekshiring (domen kerak). 2) Brauzer kameraga ruxsat so'raganda «Ruxsat berish»ni bosing (sozlamalar → sayt ruxsatlari). 3) Hozircha domen bo'lmasa — «📸 Suratga olish» tugmasi bilan har titulni alohida suratga oling.</p>
+  {% endcall %}
+  {% call q("Skaner «aniq o'qilmadi» deyapti") %}
+    <p>Titulni yorug' joyda, ramka ichiga to'liq (4 ta burchak ko'rinadigan) va qimirlatmasdan tuting. Doirachalar yengil bo'yalgan bo'lsa — «Admin tekshirsin» tugmasi bilan yuboring, admin rasmni ko'rib hal qiladi.</p>
+  {% endcall %}
+  {% call q("Kalitni (to'g'ri javoblarni) olimpiadadan keyin kiritsam bo'ladimi?") %}
+    <p>Ha. Skanerlangan ishlar saqlanadi; kalitni «📝 Titul va skaner → Fanlar va kalitlar»da kiritib «Saqlash va hisoblash»ni bossangiz hammasi avtomatik ballanadi. Kalit o'zgarsa — qayta hisoblanadi.</p>
+  {% endcall %}
+  {% call q("Hakamga o'quvchi ismi ko'rinmasin / ko'rinsin") %}
+    <p>«⚙️ Umumiy sozlamalar» da hakamlarga ism ko'rsatish yoqiladi/o'chiriladi. Titulga ism yozish — «📝 Titul va skaner → Fanlar va kalitlar» tepasidagi sozlamada.</p>
+  {% endcall %}
+  {% call q("Hakam parolini unutdi") %}
+    <p>«🧑‍⚖️ Hakamlar va adminlar» → hakamni tanlang → yangi parol belgilang (🎲 tugmasi parol yaratadi).</p>
+  {% endcall %}
+  {% call q("O'quvchi ID raqamini qayerdan topadi?") %}
+    <p>Ro'yxatdan o'tgach botda yoziladi va ruxsatnomada ham bor. Admin «👥 Ishtirokchilar» da ID bo'yicha qidira oladi.</p>
+  {% endcall %}
+  {% call q("Yangi olimpiadani qanday boshlayman?") %}
+    <p>«🗄 Arxiv va tozalash» → avval to'liq Excel va zaxirani yuklab oling → so'ng eski ma'lumotlarni tozalang. Sozlamalar, maktablar va matnlar saqlanadi.</p>
+  {% endcall %}
+</div>
+{% endblock %}

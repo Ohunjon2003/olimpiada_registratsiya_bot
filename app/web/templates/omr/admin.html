@@ -96,6 +96,24 @@
     </ul>
   </div>
 </div>
+<div class="card mt">
+  <h2>🎓 O'quvchilar uchun qo'llanma</h2>
+  <p class="small muted">Titulni qanday to'ldirish (ID va javoblarni belgilash) namunasi. Olimpiadadan oldin o'quvchilarga ko'rsating: botda yuboring, guruhga tashlang yoki chop etib devorga osing.</p>
+  <div class="guide-row">
+    <a href="/qollanma.png" target="_blank"><img src="/qollanma.png" alt="Qo'llanma" class="guide-thumb" loading="lazy"></a>
+    <div>
+      <div class="btns mb">
+        <a class="btn primary" href="/qollanma.pdf">⬇️ PDF (chop etish uchun)</a>
+        <a class="btn" href="/qollanma.png" download="titul-qollanma.png">🖼 Rasm (PNG)</a>
+        <a class="btn" href="/qollanma" target="_blank">👁 O'quvchi ko'radigan sahifa</a>
+      </div>
+      <div class="field"><label>O'quvchilarga yuboriladigan havola</label>
+        <div class="btns"><input type="text" id="guide-url" readonly value="{{ request.url.scheme }}://{{ request.url.netloc }}/qollanma" style="flex:1;min-width:200px" onclick="this.select()">
+        <button class="btn" type="button" onclick="var i=document.getElementById('guide-url');i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);this.textContent='✅ Nusxalandi'">📋 Nusxalash</button></div>
+        <div class="help">Havola login talab qilmaydi — telefonda to'g'ridan-to'g'ri ochiladi. Botdagi ommaviy xabarga qo'shib yuborish mumkin («📣 Xabar yuborish»).</div></div>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 {# ------------------------------------------------------------------ TEKSHIRISH #}
