@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Kim nima oladi{% endblock %}
+{% block crumbs %}<a href="/admin/certificates">Sertifikatlar</a> / Kim nima oladi{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>📋 Kim qaysi sertifikatni oladi</h1>
+    <div class="muted">Faol shablonlar va «🏅 O'rinlar va mukofotlar» qoidalari bo'yicha. Yuborishdan oldin tekshirib oling.</div></div>
+  <div class="btns"><a class="btn" href="/admin/awards">🏅 Mukofot qoidalari</a></div>
+</div>
+
+{% if round and not round.is_locked %}
+<div class="alert warn">🔓 «{{ round.name }}» natijalari hali qulflanmagan — hakamlar ballni o'zgartirsa, o'rinlar ham o'zgaradi.
+  Yakuniy natijalardan keyin «🔁 Turlar» bo'limida turni qulflang.</div>
+{% endif %}
+{% if not templates %}<div class="alert warn">Faol sertifikat shabloni yo'q. Shablonni ochib «Faol» belgisini qo'ying.</div>{% endif %}
+
+<div class="grid g4 mb">
+  <div class="card stat"><div class="v">{{ total }}</div><div class="l">Jami sertifikat</div></div>
+  <div class="card stat"><div class="v">🥇 {{ by_prize.get(1, 0) }}</div><div class="l">1-o'rin</div></div>
+  <div class="card stat"><div class="v">🥈 {{ by_prize.get(2, 0) }} · 🥉 {{ by_prize.get(3, 0) }}</div><div class="l">2 va 3-o'rin</div></div>
+  <div class="card stat"><div class="v">{{ by_prize.get(None, 0) }}</div><div class="l">Ishtirokchi sertifikati</div></div>
+</div>
+
+<form class="card filters mb" method="get">
+  <div><label class="small">Shablon</label><select name="tid"><option value="">Barchasi</option>
+    {% for t in templates %}<option value="{{ t.id }}" {% if params.get('tid') == t.id|string %}selected{% endif %}>{{ t.name }} ({{ by_tpl.get(t.id, 0) }})</option>{% endfor %}</select></div>
+  <div><label class="small">Fan / blok</label><select name="subject"><option value="">Barchasi</option>
+    {% for s in subjects %}<option {% if params.get('subject') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div><label class="small">O'rin</label><select name="prize">
+    {% for v, l in [('', 'Barchasi'), ('yes', 'Faqat sovrindorlar'), ('1', '1-o\'rin'), ('2', '2-o\'rin'), ('3', '3-o\'rin'), ('no', 'Sovrindor emaslar')] %}
+    <option value="{{ v }}" {% if params.get('prize', '') == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn primary">Ko'rsatish</button><a class="btn" href="?">Tozalash</a></div>
+</form>
+
+<div class="card mb">
+  <h3>⬇️ Chop etish uchun yuklab olish</h3>
+  <p class="muted small">Ko'p sertifikat bo'lsa bir necha daqiqa oladi — fonda tayyorlanadi, sahifani yopmang. Yuqoridagi filtrlar qo'llanadi.</p>
+  <form hx-post="/admin/certificates/export" hx-target="#job" hx-swap="innerHTML" class="btns">
+    <input type="hidden" name="tid" value="{{ params.get('tid', '') }}"><input type="hidden" name="subject" value="{{ params.get('subject', '') }}">
+    <input type="hidden" name="prize" value="{{ params.get('prize', '') }}">
+    <button class="btn" name="fmt" value="pdf">🖨 Hammasi bitta PDF'da</button>
+    <button class="btn" name="fmt" value="zip">🗂 Har biri alohida PDF (ZIP)</button>
+  </form>
+  <div id="job"></div>
+</div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>ID</th><th>Familiya Ism</th><th>Maktab</th><th>Sinf</th><th>Fan / blok</th><th>O'rin</th><th>Mukofot</th><th>Shablon</th><th></th></tr></thead>
+  <tbody>
+  {% for p, it in items %}
+  <tr class="{% if it.prize == 1 %}place-1{% endif %}">
+    <td>{{ p.code }}</td><td><a href="/admin/participants/{{ p.id }}">{{ p.full_name }}</a></td>
+    <td>{{ p.school.name }}</td><td>{{ p.grade.name }}</td><td>{{ it.title }}</td>
+    <td>{{ it.place }}</td>
+    <td>{% if it.prize %}<span class="badge ok">{{ it.context.award }}</span>{% else %}<span class="muted">{{ it.context.award }}</span>{% endif %}</td>
+    <td class="small">{{ it.template.name }}</td>
+    <td><a class="btn sm" target="_blank" href="/admin/certificates/{{ it.template.id }}/preview.png?code={{ p.code }}">👁</a></td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="empty">Hech narsa yo'q: shablon faolmi, natijalar kiritilganmi?</td></tr>{% endfor %}
+  </tbody></table></div>
+{% if total > items|length %}<p class="muted small">Birinchi {{ items|length }} tasi ko'rsatildi (jami {{ total }}).</p>{% endif %}
+{% endblock %}

@@ -1,7 +1,6 @@
 """Ishga tushirishdagi tayyorgarlik: migratsiya va boshlang'ich ma'lumotlar."""
 from __future__ import annotations
 
-import json
 import logging
 
 from alembic import command
@@ -52,11 +51,24 @@ async def seed() -> None:
                 s.add(Round(name="1-tur", position=0, is_current=True, open_to_all=True))
             # 4) Standart sertifikat shabloni (o'chiq holatda)
             if (await s.execute(select(func.count()).select_from(CertificateTemplate))).scalar_one() == 0:
-                w, h = certs.image_size(None)
-                s.add(CertificateTemplate(name="G'oliblar diplomi (1–3 o'rin)", is_active=False,
-                                          width=w, height=h, rule="top", top_n=3,
-                                          fields_json=json.dumps(certs.DEFAULT_FIELDS, ensure_ascii=False)))
+                tpl = certs.new_template("certificate", "classic_gold", "G'oliblar sertifikati (sovrindorlar)")
+                tpl.rule = "winners"
+                s.add(tpl)
             s.add(Setting(key="_seeded", value="1"))
+        # 4a) Eski (1-versiya) sertifikat shablonlarini yangi dizayn formatiga o'tkazish
+        for tpl in (await s.execute(select(CertificateTemplate).where(CertificateTemplate.design_json == ""))).scalars():
+            try:
+                certs.save_design(tpl, certs.load_design(tpl))
+                log.info("Shablon yangi dizayn formatiga o'tkazildi: %s", tpl.name)
+            except Exception:
+                log.exception("Shablonni o'tkazib bo'lmadi: %s", tpl.name)
+        # 4b) Ruxsatnoma shabloni (bitta bo'lishi kifoya)
+        has_pass = (await s.execute(select(func.count()).select_from(CertificateTemplate)
+                                    .where(CertificateTemplate.kind == "pass"))).scalar_one()
+        if not has_pass:
+            tpl = certs.new_template("pass", "pass_default", "Ruxsatnoma")
+            tpl.is_active = True
+            s.add(tpl)
         # 5) Eski standart matnlarni (admin o'zgartirmagan bo'lsa) yangi, emojili variantga almashtirish
         for key, olds in st.OLD_DEFAULTS.items():
             row = await s.get(Setting, key)

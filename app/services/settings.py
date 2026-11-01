@@ -52,6 +52,15 @@ DEFAULTS: dict[str, tuple[str, Any, str]] = {
     # --- E'tirozlar («⚖️ E'tirozlar» sahifasi) ---
     "appeals_enabled": ("bool", False, "O'quvchilar natijaga e'tiroz bildira oladi"),
     "appeals_until": ("datetime", None, "E'tiroz qabul qilish muddati"),
+    # --- Joylashtirish va ruxsatnoma («🪑 Joylashtirish» sahifasi) ---
+    "seating_one_per_desk": ("bool", False, "Har partaga 1 kishi (2 kishilik partalarda)"),
+    "seating_group_by": ("str", "none", "Smena/xonalarni guruhlash: none | grade | subject"),
+    "pass_notice": ("bool", False, "Ro'yxatdan o'tganda ruxsatnoma haqida xabar berish"),
+    "passes_published": ("bool", False, "Botda «🎫 Ruxsatnoma» tugmasi ko'rinadi"),
+    "pass_send_time": ("str", "18:00", "Ruxsatnoma yuboriladigan vaqt (olimpiadadan bir kun oldin)"),
+    # --- Avtomatik tekshiruv («📝 Titul va skaner» sahifasi) ---
+    "omr_id_required": ("bool", True, "O'quvchi ID belgilamagan titul admin tasdig'iga tushadi"),
+    "omr_show_name": ("bool", False, "Titulda o'quvchi ismi yozilsin"),
 }
 
 _cache: dict[str, str] = {}
@@ -97,7 +106,8 @@ OLD_DEFAULTS: dict[str, list[str]] = {
 TEXT_PAGE_KEYS = ("welcome_text", "welcome_text_cyr", "congrats_text", "congrats_text_cyr",
                   "sticker_welcome", "sticker_congrats", "sticker_results",
                   "admin_chats", "notify_every", "notify_errors", "backup_to_telegram",
-                  "appeals_enabled", "appeals_until")
+                  "appeals_enabled", "appeals_until", "seating_one_per_desk", "seating_group_by",
+                  "pass_notice", "passes_published", "pass_send_time", "omr_id_required", "omr_show_name")
 
 
 def raw(key: str) -> str:

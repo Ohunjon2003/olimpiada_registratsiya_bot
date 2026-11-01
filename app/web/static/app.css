@@ -273,3 +273,81 @@ img.stk { width: 72px; height: 72px; object-fit: contain; }
 }
 .danger-zone { border-color: #f2c4c6; }
 .danger-zone h2 { color: var(--err); }
+
+/* --- Sertifikat shablonlari (kartochkalar) --- */
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.tpl-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.tpl-card.inactive { opacity: .75; }
+.tpl-thumb { display: flex; align-items: center; justify-content: center; background: #e9edf3; height: 190px; border: 0; padding: 10px; cursor: pointer; width: 100%; }
+.tpl-thumb img { max-width: 100%; max-height: 170px; box-shadow: 0 2px 10px rgba(0,0,0,.15); background: #fff; }
+.tpl-card.pick:hover { border-color: var(--brand); }
+.tpl-body { padding: 10px 12px; }
+.tpl-title { display: flex; justify-content: space-between; gap: 6px; align-items: flex-start; margin-bottom: 4px; }
+.tpl-add { align-items: center; justify-content: center; min-height: 160px; border-style: dashed; color: var(--brand); font-weight: 600; }
+.mt-s { margin-top: 6px; }
+.job { padding: 10px 12px; border-radius: 8px; background: var(--brand-soft); margin-top: 10px; }
+.job.ok { background: var(--ok-soft); }
+.job.err { background: var(--err-soft); color: var(--err); }
+.job .bar { height: 6px; background: #fff; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.job .bar span { display: block; height: 100%; background: var(--brand); transition: width .4s; }
+
+/* --- Joylashtirish --- */
+.room-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.room-chip { display: flex; flex-direction: column; min-width: 92px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.room-chip:hover { border-color: var(--brand); text-decoration: none; }
+.room-chip small { color: var(--muted); font-size: 11.5px; }
+.room-chip.off { opacity: .55; }
+.room-chip.bad { border-color: #f5b5b5; background: #fff7f7; }
+.room-chip.empty { opacity: .6; }
+details.inline-edit { display: inline-block; position: relative; }
+details.inline-edit > summary { list-style: none; }
+details.inline-edit > summary::-webkit-details-marker { display: none; }
+details.inline-edit[open] > form:first-of-type { min-width: 300px; }
+.seat-layout { display: grid; grid-template-columns: 1fr 320px; gap: 14px; align-items: start; }
+@media (max-width: 1000px) { .seat-layout { grid-template-columns: 1fr; } }
+.board { background: #334155; color: #fff; text-align: center; font-weight: 700; letter-spacing: .3em; border-radius: 8px; padding: 6px; width: 50%; margin: 0 auto 14px; }
+.seat-grid { display: flex; flex-direction: column; gap: 12px; overflow-x: auto; }
+.seat-row { display: flex; gap: 22px; justify-content: center; }
+.desk { display: flex; gap: 3px; padding: 4px; background: #e2e8f0; border-radius: 8px; }
+.seat { position: relative; width: 104px; height: 74px; border: 2px solid transparent; border-radius: 6px; background: #fff; cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; padding: 4px 6px; font: inherit; text-align: left; overflow: hidden; }
+.seat .no { position: absolute; top: 3px; left: 6px; font-size: 11px; font-weight: 700; color: #1e3a8a; }
+.seat .code { position: absolute; top: 3px; right: 6px; font-size: 11px; color: #475569; }
+.seat .nm { font-weight: 600; font-size: 12.5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.seat .nm2 { font-size: 11.5px; color: #334155; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.seat .sent { position: absolute; bottom: 2px; right: 4px; font-size: 11px; }
+.seat.free { background: #fff; border: 2px dashed #cbd5e1; }
+.seat.free.unused { opacity: .45; }
+.seat.off { background: #f1f5f9; color: #94a3b8; align-items: center; justify-content: center; }
+.seat.bad { border-color: #dc2626; box-shadow: 0 0 0 2px #fecaca; }
+.seat.picked { outline: 3px solid var(--brand); outline-offset: 1px; }
+.seat:hover { filter: brightness(.97); }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+.legend .sw { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+.legend b { margin-left: auto; }
+@media (max-width: 700px) {
+  .seat { width: 74px; height: 60px; padding: 3px 4px; }
+  .seat .nm { font-size: 11px; } .seat .nm2 { display: none; }
+  .seat-row { gap: 10px; justify-content: flex-start; }
+  .board { width: auto; }
+}
+
+/* --- Avtomatik tekshiruv --- */
+.review-item { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+@media (max-width: 700px) { .review-item { grid-template-columns: 1fr; } }
+.review-img img { width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+.ans-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 4px; }
+.ans { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 12.5px; background: #fff; }
+.ans.ok { background: #dcfce7; border-color: #86efac; }
+.ans.bad { background: #fee2e2; border-color: #fca5a5; }
+.ans small { color: #166534; margin-left: 2px; }
+
+/* Bosh sahifa: olimpiada bosqichlari */
+.flow { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.flow-step { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; background: #fff; }
+.flow-step:hover { border-color: #94a3b8; }
+.flow-step .dot { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; background: #e2e8f0; color: #475569; }
+.flow-step.done { background: #f0fdf4; border-color: #bbf7d0; }
+.flow-step.done .dot { background: #22c55e; color: #fff; }
+.flow-step.doing { background: #eff6ff; border-color: #bfdbfe; }
+.flow-step.doing .dot { background: #2453d6; color: #fff; }

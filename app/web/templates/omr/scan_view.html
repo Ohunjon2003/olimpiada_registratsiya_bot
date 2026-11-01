@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Ish №{{ sc.id }}{% endblock %}
+{% block crumbs %}<a href="/admin/omr?tab=scans">Titullar</a> / №{{ sc.id }}{% endblock %}
+{% block content %}{% set p = sc.participant %}
+<div class="page-head">
+  <div><h1>📝 {{ sc.subject.name }} — ID {{ p.code }}</h1>
+    <div class="muted"><a href="/admin/participants/{{ p.id }}">{{ p.full_name }}</a> · {{ p.school.name }}, {{ p.grade.name }}-sinf
+      {% if sc.subject.variants > 1 %} · {{ variant }} variant{% endif %}</div></div>
+  <div class="btns">
+    <span class="badge {{ 'ok' if sc.status == 'applied' else ('warn' if sc.status == 'review' else '') }}">{{ statuses[sc.status] }}</span>
+    <a class="btn" href="/admin/omr/scan/{{ sc.id }}/raw.jpg" target="_blank">📷 Asl surat</a>
+  </div>
+</div>
+<div class="seat-layout">
+  <div class="card"><img src="/admin/omr/scan/{{ sc.id }}/sheet.jpg?t={{ sc.correct }}" alt="" style="width:100%;border:1px solid var(--line)"></div>
+  <div>
+    <div class="card mb">
+      <div class="stat"><div class="v">{% if sc.correct is not none %}{{ sc.correct }} / {{ sc.answers|length }}{% else %}—{% endif %}</div>
+        <div class="l">{% if sc.correct is not none %}{{ sc.score|num }} ball · {{ sc.percent|num }}%{% else %}Kalit kiritilmagan{% endif %}</div></div>
+      <table class="small mt"><tbody>
+        <tr><td class="muted">QR egasi</td><td>ID {{ qr_p.code if qr_p else '?' }}{% if qr_p and qr_p.id != p.id %} (natija ID {{ p.code }} ga yozilgan){% endif %}</td></tr>
+        <tr><td class="muted">O'quvchi belgilagan ID</td><td>{{ sc.id_marked.replace('_', '·') }}{% if marked_p %} — {{ marked_p.full_name }}{% endif %}</td></tr>
+        {% if sc.reason %}<tr><td class="muted">Sabab</td><td>{{ reasons.get(sc.reason, sc.reason) }}</td></tr>{% endif %}
+        <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>
+        {% if sc.decided_by %}<tr><td class="muted">Qaror</td><td>{{ sc.decided_by }}, {{ sc.decided_at|dt }}</td></tr>{% endif %}
+        <tr><td class="muted">Botga yuborilgan</td><td>{{ (sc.sent_at|dt) if sc.sent_at else '—' }}</td></tr>
+      </tbody></table>
+    </div>
+    {% if sc.status in ('review', 'rejected', 'superseded') %}
+    <form method="post" action="/admin/omr/scan/{{ sc.id }}/resolve" class="card mb">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h3>Qaror</h3>
+      <div class="field"><label>Javoblar (tahrirlash mumkin: A–D, «-» bo'sh, «*» bir nechta)</label>
+        <input type="text" name="answers" value="{{ sc.answers }}" style="font-family:monospace"></div>
+      <div class="field"><label>Boshqa o'quvchiga yozish uchun ID</label><input type="text" name="code" value="{{ sc.id_marked if sc.id_marked.isdigit() else '' }}" style="max-width:120px"></div>
+      <div class="btns">
+        <button class="btn primary" name="action" value="accept">✅ ID {{ qr_p.code if qr_p else '' }} ga yozish</button>
+        <button class="btn" name="action" value="accept_marked">↪ Kiritilgan ID ga yozish</button>
+        {% if sc.status == 'review' %}<button class="btn danger" name="action" value="reject">✕ Rad etish</button>{% endif %}
+      </div>
+      <div class="help">Yozilganda shu o'quvchining oldingi skaneri «almashtirilgan» bo'ladi.</div>
+    </form>
+    {% endif %}
+    {% if sc.status == 'applied' %}
+    <form method="post" action="/admin/omr/send" class="card mb">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="pid" value="{{ p.id }}">
+      <input type="hidden" name="subject_id" value="{{ sc.subject_id }}"><input type="hidden" name="round_id" value="{{ sc.round_id }}">
+      <input type="hidden" name="back" value="/admin/omr/scan/{{ sc.id }}">
+      <button class="btn">📨 O'quvchiga botda yuborish</button>
+    </form>
+    {% endif %}
+    <div class="card mb">
+      <h3>Javoblar</h3>
+      <div class="ans-grid">
+        {% for i, a, k in rows %}
+        <div class="ans {{ 'ok' if k and a == k else ('bad' if k else '') }}" title="{{ i }}-savol: belgilangan {{ a }}{% if k %}, to'g'ri {{ k }}{% endif %}">
+          <b>{{ i }}</b> {{ {'-': '—', '*': '2+', '?': '?'}.get(a, a) }}{% if k and a != k %}<small>→{{ k }}</small>{% endif %}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% if history|length > 1 %}
+    <div class="card">
+      <h3>Shu titul/o'quvchi skanerlari</h3>
+      {% for h in history %}<div class="small"><a href="/admin/omr/scan/{{ h.id }}">№{{ h.id }}</a> · {{ statuses[h.status] }} · {{ h.scanned_by }}, {{ h.scanned_at|dt }}{% if h.correct is not none %} · {{ h.correct }}/{{ h.answers|length }}{% endif %}{% if h.id == sc.id %} ← shu{% endif %}</div>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

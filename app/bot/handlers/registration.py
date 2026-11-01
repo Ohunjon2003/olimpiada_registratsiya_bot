@@ -1049,6 +1049,8 @@ async def confirm_yes(cb: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     if congrats.strip():
         await cb.message.answer(congrats, parse_mode=None, disable_web_page_preview=True)
     await cb.message.answer(t("saved_code", lang).format(code=code), reply_markup=kb.menu_kb(lang, can_edit))
+    if st.get("pass_notice"):  # olimpiada kuni joy haqida ruxsatnoma keyin yuborilishini aytamiz
+        await cb.message.answer(t("pass_notice", lang))
     await _milestone()
 
 

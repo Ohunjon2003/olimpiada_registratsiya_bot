@@ -5,10 +5,10 @@ Asia/Tashkent vaqtiga o'tkaziladi (app/utils.py).
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import (BigInteger, Boolean, Column, DateTime, Float,
+from sqlalchemy import (BigInteger, Boolean, Column, Date, DateTime, Float,
                         ForeignKey, Integer, String, Table, Text,
                         UniqueConstraint, Index)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -146,6 +146,9 @@ class Subject(Base):
     total_questions: Mapped[int] = mapped_column(Integer, default=30)
     points_per_question: Mapped[float] = mapped_column(Float, default=1.0)
     max_score_manual: Mapped[float] = mapped_column(Float, default=100.0)
+    # Avtomatik tekshiruv (titul + skaner). Faqat uniform/groups rejimlarida
+    omr_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    variants: Mapped[int] = mapped_column(Integer, default=1, server_default="1")  # 1 — variantsiz; 2..4 — A, B, ...
 
     grades: Mapped[list["Grade"]] = relationship(secondary=subject_grades, lazy="selectin")
     groups: Mapped[list["ScoreGroup"]] = relationship(
@@ -353,6 +356,10 @@ class CertificateTemplate(Base):
     __tablename__ = "certificate_templates"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
+    # certificate — sertifikat/diplom; pass — ruxsatnoma (olimpiadaga kirish varaqasi)
+    kind: Mapped[str] = mapped_column(String(16), default="certificate", server_default="certificate")
+    # Yangi dizayn (JSON): sahifa, fon, elementlar. Bo'sh bo'lsa — eski fields_json'dan o'giriladi
+    design_json: Mapped[str] = mapped_column(Text, default="", server_default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     background_path: Mapped[str] = mapped_column(String(256), default="")
     width: Mapped[int] = mapped_column(Integer, default=1754)
@@ -362,10 +369,101 @@ class CertificateTemplate(Base):
     subject_id: Mapped[Optional[int]] = mapped_column(ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True)
     block_id: Mapped[Optional[int]] = mapped_column(ForeignKey("blocks.id", ondelete="SET NULL"), nullable=True)
     round_id: Mapped[Optional[int]] = mapped_column(ForeignKey("rounds.id", ondelete="SET NULL"), nullable=True)
-    rule: Mapped[str] = mapped_column(String(16), default="all")  # all | top | percent
+    # all — natijasi borlar; winners — sovrindorlar; place — faqat top_n-o'rin sovrindorlari;
+    # participants — sovrindor bo'lmaganlar; top — 1..top_n o'rin (shartsiz); percent — foiz bo'yicha
+    rule: Mapped[str] = mapped_column(String(16), default="all")
     top_n: Mapped[int] = mapped_column(Integer, default=3)
     min_percent: Mapped[float] = mapped_column(Float, default=0)
     position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ---------------------------------------------------------------------------
+# Joylashtirish: bino, xona, smena va o'rindiqlar
+# ---------------------------------------------------------------------------
+class Building(Base):
+    """Olimpiada o'tkaziladigan bino."""
+    __tablename__ = "buildings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    name_cyr: Mapped[str] = mapped_column(String(128), default="")
+    address: Mapped[str] = mapped_column(String(256), default="")
+    address_cyr: Mapped[str] = mapped_column(String(256), default="")
+    map_url: Mapped[str] = mapped_column(String(512), default="")  # Google/Yandex xarita havolasi
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Room(Base):
+    """Xona: qatorlar × partalar × partadagi o'rinlar.
+
+    O'rin koordinatasi: row (1 — eng old qator), desk (1 — chapdan), seat (1 — chap, 2 — o'ng).
+    disabled_json — ishlatilmaydigan o'rinlar ro'yxati: ["2-3-1", ...] (qator-parta-o'rin).
+    """
+    __tablename__ = "rooms"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    building_id: Mapped[int] = mapped_column(ForeignKey("buildings.id", ondelete="RESTRICT"))
+    name: Mapped[str] = mapped_column(String(64))
+    floor: Mapped[str] = mapped_column(String(16), default="")
+    rows: Mapped[int] = mapped_column(Integer, default=5)
+    desks: Mapped[int] = mapped_column(Integer, default=3)
+    seats_per_desk: Mapped[int] = mapped_column(Integer, default=2)
+    disabled_json: Mapped[str] = mapped_column(Text, default="[]")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    building: Mapped["Building"] = relationship(lazy="selectin")
+
+    @property
+    def capacity(self) -> int:
+        """Ishlatsa bo'ladigan o'rinlar soni (o'chirilganlarsiz)."""
+        import json
+        try:
+            disabled = len(set(json.loads(self.disabled_json or "[]")))
+        except ValueError:
+            disabled = 0
+        return max(0, self.rows * self.desks * self.seats_per_desk - disabled)
+
+
+class ExamSession(Base):
+    """Smena: olimpiada qaysi kuni va soat nechada (bir turda bir nechta smena bo'lishi mumkin)."""
+    __tablename__ = "exam_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(64))
+    name_cyr: Mapped[str] = mapped_column(String(64), default="")
+    day: Mapped[date] = mapped_column(Date)
+    arrive_time: Mapped[str] = mapped_column(String(5), default="08:30")  # HH:MM (mahalliy)
+    start_time: Mapped[str] = mapped_column(String(5), default="09:00")
+    duration_min: Mapped[int] = mapped_column(Integer, default=120)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    round: Mapped["Round"] = relationship(lazy="selectin")
+
+
+class SeatAssignment(Base):
+    """Ishtirokchining shu turdagi o'rni: smena, xona, qator, parta, o'rin."""
+    __tablename__ = "seat_assignments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id", ondelete="CASCADE"))
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    session_id: Mapped[int] = mapped_column(ForeignKey("exam_sessions.id", ondelete="CASCADE"))
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
+    row: Mapped[int] = mapped_column(Integer)
+    desk: Mapped[int] = mapped_column(Integer)
+    seat: Mapped[int] = mapped_column(Integer, default=1)
+    pass_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # ruxsatnoma yuborilgan vaqt
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    participant: Mapped["Participant"] = relationship(lazy="selectin")
+    session: Mapped["ExamSession"] = relationship(lazy="selectin")
+    room: Mapped["Room"] = relationship(lazy="selectin")
+
+    __table_args__ = (
+        UniqueConstraint("participant_id", "round_id", name="uq_seat_participant_round"),
+        UniqueConstraint("session_id", "room_id", "row", "desk", "seat", name="uq_seat_place"),
+        Index("ix_seat_round_session_room", "round_id", "session_id", "room_id"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -415,3 +513,55 @@ class FsmRecord(Base):
     state: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     data: Mapped[str] = mapped_column(Text, default="{}")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+# ---------------------------------------------------------------------------
+# Avtomatik tekshiruv: kalitlar va skanerlangan titullar
+# ---------------------------------------------------------------------------
+class AnswerKey(Base):
+    """To'g'ri javoblar: fan × tur × variant. answers — «ABCD...» (savollar soniga teng)."""
+    __tablename__ = "answer_keys"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"))
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    variant: Mapped[int] = mapped_column(Integer, default=0)  # 0 — A, 1 — B ...
+    answers: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (UniqueConstraint("subject_id", "round_id", "variant", name="uq_answer_key"),)
+
+
+class SheetScan(Base):
+    """Skanerlangan titul.
+
+    status: applied — natijaga yozilgan; review — admin tekshiruvi kerak; rejected — rad etilgan;
+            superseded — keyingi skaner bilan almashtirilgan.
+    answers: har savol uchun bitta belgi — A..D, «-» bo'sh, «*» bir nechta belgi.
+    """
+    __tablename__ = "sheet_scans"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id", ondelete="CASCADE"))
+    qr_participant_id: Mapped[int] = mapped_column(Integer)          # titul QR'idagi o'quvchi
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"))
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    variant: Mapped[int] = mapped_column(Integer, default=0)
+    answers: Mapped[str] = mapped_column(String(400), default="")
+    id_marked: Mapped[str] = mapped_column(String(12), default="")   # o'quvchi o'zi belgilagan ID
+    status: Mapped[str] = mapped_column(String(16), default="applied", index=True)
+    reason: Mapped[str] = mapped_column(String(32), default="")      # id_mismatch | id_empty | differs | manual_exists
+    correct: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    image: Mapped[str] = mapped_column(String(128), default="")      # tekislangan titul (jpg)
+    raw_image: Mapped[str] = mapped_column(String(128), default="")  # asl surat (kichraytirilgan)
+    scanned_by: Mapped[str] = mapped_column(String(64), default="")
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    decided_by: Mapped[str] = mapped_column(String(64), default="")
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # o'quvchiga botda yuborilgan
+
+    participant: Mapped["Participant"] = relationship(lazy="selectin")
+    subject: Mapped["Subject"] = relationship(lazy="selectin")
+
+    __table_args__ = (Index("ix_scan_lookup", "subject_id", "round_id", "participant_id"),)

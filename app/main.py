@@ -133,12 +133,12 @@ async def server_error(request: Request, exc: Exception):
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="static")
 
-from .web.routers import (admin, appeals, archive, attendance, auth, broadcasts, certificates, crud,  # noqa: E402
-                          judge, notify, participants, ranking, texts)
+from .web.routers import (admin, appeals, archive, attendance, auth, awards, broadcasts,  # noqa: E402
+                          certificates, crud, judge, notify, omr, participants, ranking, seating, texts)
 
 for r in (auth.router, admin.router, crud.router, participants.router, judge.router,
           ranking.router, broadcasts.router, certificates.router, texts.router,
           notify.router, appeals.router, attendance.router,
-          archive.router):
+          archive.router, awards.router, seating.router, omr.router):
     app.include_router(r)
 

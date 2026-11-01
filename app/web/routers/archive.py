@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...config import config
 from ...db import get_session
 from ...models import (Appeal, Attendance, AuditLog, Block, Broadcast,
-                       CustomQuestion, FsmRecord, Participant, Result, Round,
-                       Subject, User)
+                       AnswerKey, CustomQuestion, FsmRecord, Participant, Result, Round,
+                       SeatAssignment, SheetScan, Subject, User)
 from ...security import verify_password
 from ...services import attendance as att_svc
 from ...services import audit, backup, export, notify, ranking
@@ -35,7 +35,7 @@ async def _counts(session: AsyncSession) -> dict:
     db_size = sum(p.stat().st_size for p in config.DATA_DIR.glob("olimpiada.db*") if p.exists())
     return {"participants": await n(Participant), "results": await n(Result), "attendance": await n(Attendance),
             "appeals": await n(Appeal), "broadcasts": await n(Broadcast), "audit": await n(AuditLog),
-            "fsm": await n(FsmRecord), "db_mb": round(db_size / 1024 / 1024, 2)}
+            "fsm": await n(FsmRecord), "seats": await n(SeatAssignment), "scans": await n(SheetScan), "db_mb": round(db_size / 1024 / 1024, 2)}
 
 
 @router.get("")
@@ -131,7 +131,35 @@ async def build_archive(session: AsyncSession) -> bytes:
                             for a, p in att_rows],
                    "widths": [10, 8, 18, 16, 26, 7, 10, 14, 17]})
 
-    # 6) E'tirozlar
+    # 6) Joylashtirish (o'rinlar)
+    seats = (await session.execute(select(SeatAssignment))).scalars().all()
+    seats.sort(key=lambda a: (a.round_id, a.session.day, a.session.start_time, a.room.position, a.room_id,
+                              a.row, a.desk, a.seat))
+    sheets.append({"title": "O'rinlar",
+                   "headers": ["Tur", "Sana", "Smena", "Boshlanish", "Bino", "Xona", "Qator", "Parta", "O'rin", "ID",
+                               "Familiya Ism", "Maktab", "Sinf", "Ruxsatnoma yuborilgan"],
+                   "rows": [[round_name.get(a.round_id, ""), a.session.day.strftime("%d.%m.%Y"), a.session.name,
+                             a.session.start_time, a.room.building.name if a.room.building else "", a.room.name,
+                             a.row, a.desk, a.seat, a.participant.code, a.participant.full_name,
+                             a.participant.school.name if a.participant.school else "",
+                             a.participant.grade.name if a.participant.grade else "", fmt_dt(a.pass_sent_at)]
+                            for a in seats],
+                   "widths": [10, 11, 10, 10, 22, 10, 7, 7, 7, 8, 26, 26, 7, 18]})
+
+    # 7) Skanerlangan titullar
+    scans = (await session.execute(select(SheetScan).order_by(SheetScan.id))).scalars().all()
+    st_names2 = {"applied": "Qabul qilingan", "review": "Tekshirish kerak", "rejected": "Rad etilgan",
+                 "superseded": "Almashtirilgan"}
+    sheets.append({"title": "Titullar",
+                   "headers": ["№", "Tur", "Fan", "Variant", "ID", "Familiya Ism", "Belgilangan ID", "Javoblar",
+                               "To'g'ri", "Ball", "Foiz", "Holat", "Skaner qilgan", "Vaqt"],
+                   "rows": [[x.id, round_name.get(x.round_id, ""), x.subject.name if x.subject else "", "ABCD"[x.variant],
+                             x.participant.code, x.participant.full_name, x.id_marked, x.answers, x.correct, x.score,
+                             x.percent, st_names2.get(x.status, x.status), x.scanned_by, fmt_dt(x.scanned_at)]
+                            for x in scans],
+                   "widths": [6, 10, 16, 8, 8, 24, 10, 40, 8, 8, 8, 14, 14, 17]})
+
+    # 8) E'tirozlar
     appeals = (await session.execute(select(Appeal).order_by(Appeal.id))).scalars().all()
     st_names = {"new": "Yangi", "accepted": "Qabul qilingan", "rejected": "Rad etilgan"}
     sheets.append({"title": "E'tirozlar",
@@ -190,16 +218,32 @@ async def archive_cleanup(request: Request, user: User = Depends(require_admin),
 
     before = await _counts(session)
     done = []
+    def drop_scan_files() -> int:
+        n = 0
+        for f in (config.UPLOAD_DIR / "scans").glob("*.jpg"):
+            try:
+                f.unlink()
+                n += 1
+            except OSError:
+                pass
+        return n
+
+    if "participants" in what or "results" in what:
+        await session.execute(delete(SheetScan))
+        await session.execute(delete(AnswerKey))
+        await asyncio.to_thread(drop_scan_files)
     if "participants" in what:
         # Natijalar, davomat, e'tirozlar, javoblar bazadagi CASCADE orqali birga o'chadi
         await session.execute(delete(Participant))
         await session.execute(delete(FsmRecord))  # botdagi chala qolgan holatlar
-        done.append(f"{before['participants']} ta ishtirokchi (natija, davomat, e'tirozlari bilan)")
+        done.append(f"{before['participants']} ta ishtirokchi (natija, davomat, e'tiroz va o'rinlari bilan)")
     elif "results" in what:
         await session.execute(delete(Result))
         await session.execute(delete(Attendance))
         await session.execute(delete(Appeal))
-        done.append(f"{before['results']} ta natija, {before['attendance']} ta davomat, {before['appeals']} ta e'tiroz")
+        await session.execute(delete(SeatAssignment))
+        done.append(f"{before['results']} ta natija, {before['attendance']} ta davomat, {before['appeals']} ta e'tiroz, "
+                    f"{before['seats']} ta o'rin, {before['scans']} ta skanerlangan titul (kalitlar bilan)")
     if "broadcasts" in what:
         await session.execute(delete(Broadcast))
         for f in (config.UPLOAD_DIR / "broadcasts").glob("*"):
@@ -214,7 +258,8 @@ async def archive_cleanup(request: Request, user: User = Depends(require_admin),
     if "flags" in what:
         await st.set_many(session, {"results_published": False, "certificates_enabled": False,
                                     "appeals_enabled": False, "appeals_until": None,
-                                    "registration_start": None, "registration_end": None})
+                                    "registration_start": None, "registration_end": None,
+                                    "passes_published": False})
         done.append("e'lonlar va muddatlar (natija, sertifikat, e'tiroz, ro'yxat muddati)")
     audit.log(session, user, "delete", "archive", "", "Tozalash: " + "; ".join(done),
               new={"backup": path.name, "what": sorted(what)}, ip=client_ip(request))

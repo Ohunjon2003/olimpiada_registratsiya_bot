@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}O'rinlar va mukofotlar{% endblock %}
+{% block crumbs %}<a href="/admin/certificates">Sertifikatlar</a> / O'rinlar va mukofotlar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🏅 O'rinlar va mukofotlar</h1>
+    <div class="muted">O'rinlar ballga qarab avtomatik aniqlanadi (teng ball — teng o'rin: 1, 2, 2, 4). Bu yerda kim <b>sovrindor</b> bo'lishini belgilaysiz.</div></div>
+  <div class="btns"><a class="btn" href="/admin/certificates/review">📋 Kim nima oladi</a></div>
+</div>
+
+{% if round %}
+<div class="card mb">
+  <div class="btns">
+    <form method="post" action="/admin/awards/lock" class="inline" data-confirm="{{ 'Natijalarni ochaymi? Hakamlar yana ball o\'zgartira oladi.' if round.is_locked else 'Natijalarni qulflaymi? Shundan keyin hakamlar ballni o\'zgartira olmaydi.' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if round.is_locked %}<button class="btn ok">🔒 «{{ round.name }}» natijalari qulflangan — ochish</button>
+      {% else %}<button class="btn">🔓 «{{ round.name }}» natijalari ochiq — yakunlash (qulflash)</button>{% endif %}
+    </form>
+    <span class="muted small">Barcha ballar kiritilgach turni qulflang — o'rinlar yakuniy bo'ladi. So'ng sertifikatlarni yuborasiz.</span>
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/awards">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="card mb">
+    <h2>Umumiy qoida</h2>
+    <div class="filters">
+      <div><label class="small">Sovrinli o'rinlar soni</label><input type="number" name="default_places" min="0" max="50" value="{{ rules.default.places }}"></div>
+      <div><label class="small">Minimal foiz (sovrindor bo'lish uchun)</label><input type="number" name="default_min" min="0" max="100" step="any" value="{{ rules.default.min_percent|num }}"></div>
+      <div><label class="small">O'rin qanday hisoblanadi</label><select name="ranking_by_grade">
+        <option value="1" {% if setting('ranking_by_grade') %}selected{% endif %}>Har sinf alohida (9-sinflar orasida 1-o'rin...)</option>
+        <option value="0" {% if not setting('ranking_by_grade') %}selected{% endif %}>Umumiy (barcha sinflar birga)</option></select></div>
+    </div>
+    <div class="help">Masalan: 3 ta o'rin va 50% — eng yuqori 3 ta o'rin egalari sovrindor, lekin faqat foizi 50 va undan yuqori bo'lsa.
+      Ball 0 bo'lgan o'quvchi sovrindor bo'lmaydi.</div>
+  </div>
+
+  <div class="card mb">
+    <h2>Fan va bloklar bo'yicha (ixtiyoriy)</h2>
+    <p class="muted small">Bo'sh qoldirilsa — umumiy qoida ishlatiladi. O'ngda — joriy tur natijalari bo'yicha hozirgi holat.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fan / blok</th><th>Sovrinli o'rinlar</th><th>Minimal foiz</th><th>Natijasi bor</th><th>1-o'rin</th><th>Jami sovrindor</th></tr></thead>
+      <tbody>
+      {% for s in subjects %}{% set key = 's:' ~ s.id %}{% set r = rules.get(key, {}) %}{% set stt = stats.get(key) %}
+      <tr><td>📘 {{ s.name }}</td>
+        <td><input type="number" name="places_{{ key }}" min="0" max="50" value="{{ r.places if r else '' }}" placeholder="{{ rules.default.places }}" style="max-width:110px"></td>
+        <td><input type="number" name="min_{{ key }}" min="0" max="100" step="any" value="{{ r.min_percent|num if r else '' }}" placeholder="{{ rules.default.min_percent|num }}" style="max-width:110px"></td>
+        <td>{{ stt[0] if stt else '—' }}</td><td>{{ stt[1] if stt else '—' }}</td><td><b>{{ stt[2] if stt else '—' }}</b></td></tr>
+      {% endfor %}
+      {% for b in blocks %}{% set key = 'b:' ~ b.id %}{% set r = rules.get(key, {}) %}{% set stt = stats.get(key) %}
+      <tr><td>🧩 {{ b.name }} <span class="muted small">(blok)</span></td>
+        <td><input type="number" name="places_{{ key }}" min="0" max="50" value="{{ r.places if r else '' }}" placeholder="{{ rules.default.places }}" style="max-width:110px"></td>
+        <td><input type="number" name="min_{{ key }}" min="0" max="100" step="any" value="{{ r.min_percent|num if r else '' }}" placeholder="{{ rules.default.min_percent|num }}" style="max-width:110px"></td>
+        <td>{{ stt[0] if stt else '—' }}</td><td>{{ stt[1] if stt else '—' }}</td><td><b>{{ stt[2] if stt else '—' }}</b></td></tr>
+      {% endfor %}
+      {% if not subjects and not blocks %}<tr><td colspan="6" class="empty">Fanlar yo'q</td></tr>{% endif %}
+      </tbody></table></div>
+  </div>
+
+  <div class="card mb">
+    <h2>Mukofot yozuvi — <code>{award}</code></h2>
+    <p class="muted small">Sertifikatdagi <code>{award}</code> o'rniga chiqadigan matn. Masalan «{subject} fanidan {award}» → «Matematika fanidan 1-o'rin g'olibi».
+      Kirill yozuvidagi o'quvchilarga avtomatik o'giriladi.</p>
+    <div class="grid g2">
+      {% for k, label in [('award_text_1', '1-o\'rin'), ('award_text_2', '2-o\'rin'), ('award_text_3', '3-o\'rin'), ('award_text_n', '4-o\'rin va undan keyin ({place} — o\'rin raqami)'), ('award_text_none', 'Sovrindor bo\'lmaganlar')] %}
+      <div class="field"><label>{{ label }}</label><input type="text" name="{{ k }}" value="{{ texts[k] }}" maxlength="80" placeholder="{{ defaults[k] }}"></div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="btns"><button class="btn primary">💾 Saqlash</button></div>
+</form>
+{% endblock %}

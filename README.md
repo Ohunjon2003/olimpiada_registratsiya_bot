@@ -37,7 +37,14 @@ Bot va web bitta jarayonda ishlaydi, baza — SQLite (bitta fayl).
 - **Reyting**: fan bo'yicha **va blok bo'yicha** (bir nechta fan birlashtiriladi: ballar yig'indisi yoki foizlar o'rtachasi). Sinf kesimida yoki umumiy. Teng ball — teng o'rin (1, 2, 2, 4).
 - **Turlar** (1-tur, final): eng yaxshilarni keyingi turga bir tugma bilan o'tkazish.
 - Ishtirokchilar: qidiruv va filtrlar (maktab, sinf, fan, holat, til, sana), tahrirlash, chetlatish, botda shaxsiy xabar, **Excel eksport**.
-- **Sertifikat/diplom**: yoqish-o'chirish, **vizual dizayner** (fon rasmi yuklash, matnlarni sichqoncha bilan joylash, shrift, rang, o'lcham), kimga berilishi (hammaga / 1–N o'rin / foiz bo'yicha), ZIP yuklab olish, botda o'quvchi o'zi oladi.
+- **Sertifikat/diplom dizayneri** (Canva'ga o'xshash): fon — rang, gradient yoki rasm (Canva'da tayyorlangan rasmni ham yuklash mumkin); matn, logo/muhr/imzo rasmlari, to'rtburchak, doira, chiziq; sichqoncha bilan surish, cho'zish, burish, yopishuvchi yo'riqnoma chiziqlari, qatlamlar, Ctrl+Z/Y, avtosaqlash; 15 ta shrift (lotin + kirill, o'zbek harflari bilan) va o'z shriftingizni yuklash; soya, kontur, harf oralig'i; A4/A5, 150–300 dpi. 8 ta tayyor dizayn (oltin, ko'k, yashil, minimal, 1/2/3-o'rin diplomlari, bo'sh). Ekrandagi ko'rinish PDF bilan **aynan bir xil** (bir xil shrift o'lchamlari va joylashtirish algoritmi).
+- **O'rinlar va mukofotlar** (🏅): o'rin ballga qarab avtomatik (1, 2, 2, 4). Har fan/blok uchun nechta sovrinli o'rin va minimal foiz. Shablon «kimga»: sovrindorlarga / faqat N-o'ringa / ishtirokchilarga / hammaga. `{place}`, `{place_text}`, `{place_roman}`, `{award}` o'zgaruvchilari. «Kim nima oladi» sahifasi, chop etish uchun bitta PDF yoki ZIP (fonda tayyorlanadi). Botga **rasm + PDF**, sovrindorga «🏆 Tabriklaymiz! … 1-o'rin» izohi bilan.
+- **Joylashtirish** (🪑): bino → xonalar (qator × parta × partadagi o'rin, singan o'rinlarni o'chirish) → smenalar (avtomatik yaratish: sana, kuniga vaqtlar). «Taqsimlash» — o'quvchilar smena → xona → o'rinlarga: **bir maktab xonalarga tekis tarqaladi, bir xonaga tushsa ham bir partada, yonma-yon va old-orqada o'tirmaydi** (1500 o'quvchi — 0,3 soniya). Smenalarga bo'lish usuli tanlanadi: aralash yoki **maktablar tartibida** (masalan, 1–20-maktablar 1-smenada, 21–40-maktablar 2-smenada; bitta maktab ikki smenaga bo'linmaydi). Xona sxemasi (maktablar rangda), o'quvchini bosib ko'chirish/almashtirish, keyin qo'shilganlarni bo'sh joyga qo'yish.
+- **Ruxsatnoma** (🎫): sana, kelish/boshlanish vaqti, bino, manzil (xarita), xona, qator/parta/o'rin — dizaynerda o'zgartiriladi. Olimpiadadan **bir kun oldin belgilangan soatda avtomatik** botga yuboriladi (rasm + PDF), botda «🎫 Ruxsatnoma» tugmasi. Joy o'zgarsa — yangisi avtomatik ketadi. Xona eshigiga ro'yxat va o'tirish sxemasi (PDF), maktablar bo'yicha Excel, davomatda smena/xona filtri.
+- **Titul va avtomatik tekshiruv** (📝): har o'quvchiga shaxsiy titul (QR + ID doirachalari), A4 ga 4/2/1 tadan (savollar soniga qarab: 40/100/200 gacha), javoblar A–D, variantlar (A/B…) ixtiyoriy — yonma-yon o'tirganlarga turli variant. Hakam **telefon kamerasi** bilan ketma-ket skaner qiladi: 🟢 «qabul qilindi», 🟡 «oldin kiritilgan», 🟠 «admin tekshiradi», 🟣 «aniq o'qilmadi». Ikki belgi — xato. Kalitni olimpiadadan keyin kiritsa ham bo'ladi — hammasi qayta hisoblanadi. Fan bo'yicha yoqib-o'chiriladi (qo'lda kiritish ishlayveradi). Hakam faqat o'z fanini skaner qiladi va o'quvchi ismini ko'rmaydi.
+  - **Titul almashib qolmasligi** — 3 qavat: (1) titullar smena → xona → o'rin tartibida chop etiladi, titulda xona va o'rin yozilgan — nazoratchi oldindan partalarga qo'yadi; (2) o'quvchi titulga **o'z ID sini** belgilaydi, skaner QR dagi ID bilan solishtiradi — mos kelmasa natija yozilmaydi; (3) bunday ishlar «🔎 Tekshirish kerak» navbatiga tushadi, admin rasmini ko'rib to'g'ri o'quvchiga yozadi.
+  - Barcha ishlar rasmi saqlanadi: o'quvchi sahifasida va «Ishlar» bo'limida (filtrlar bilan) — ✓/✗ belgilangan titul. Tanlanganlarga yoki filtr bo'yicha **tekshirilgan titulni botga yuborish**.
+- **Bosh sahifada bosqichlar paneli**: ro'yxat → joylashtirish → ruxsatnoma → davomat → skaner → natijalar → sertifikatlar — qaysi ish qolgani bir qarashda.
 - **Xabar yuborish**: filtr bo'yicha, rasm bilan, **rejalashtirilgan** (eslatmalar uchun), natijalarni va sertifikatlarni hammaga yuborish. Botni bloklaganlar belgilanadi.
 - Kanallar, nizom, maktablar (ro'yxatni birdaniga qo'shish), sinflar, fanlar, bloklar, turlar, qo'shimcha savollar — hammasi paneldan.
 - **Davomat** (🙋): olimpiada kuni kirishda «✅ Keldi / ❌ Kelmadi». Familiya/ism/ID ning birinchi harflarini yozish bilan ro'yxat darhol chiqadi (Enter shart emas; bitta o'quvchi qolsa Enter uni «Keldi» qiladi). Sinf tugmalari, maktab/fan/holat filtrlari, jonli hisoblagich. Ishtirokchilar ro'yxati, ball kiritish va ommaviy xabarda «kelganlar / kelmaganlar» filtri. Hakamlarga ruxsat — sozlamada.
@@ -82,6 +89,15 @@ olimpiada/
 ### 3.2. Domen (tavsiya)
 Admin va hakam parollari internetda **HTTPS** orqali yurishi uchun domen oling (masalan, `olimpiada.uz`) va
 DNS'da `A` yozuvini server IP manziliga yo'naltiring. Domensiz ham ishlaydi (faqat IP, HTTP).
+
+> **Titul skaneri uchun domen (HTTPS) zarur**: telefon brauzeri jonli kamerani faqat HTTPS saytda beradi.
+> Domensiz skaner «📸 Suratga olish» rejimida ishlaydi (har titulni alohida suratga olish).
+
+**Ishlab turgan serverga domen qo'shish** (ma'lumotlar va `.env` saqlanadi):
+1. Domen sotib oling, DNS boshqaruvida `A` yozuv: `@` → server IP (masalan `159.89.25.17`). 5–30 daqiqa kuting;
+   tekshirish: `ping olimpiada.uz` server IP sini ko'rsatishi kerak.
+2. Serverda: `cd ~/olimpiada_registratsiya_bot && git pull && sudo bash deploy/setup.sh olimpiada.uz`
+3. Skript bepul SSL oladi, HTTP → HTTPS yo'naltiradi va `COOKIE_SECURE=true` qiladi. Panel: `https://olimpiada.uz`.
 
 ---
 
@@ -162,6 +178,11 @@ Terminalda har bir kelgan xabar `Bot ← <id> (xabar: ...)` ko'rinishida yozilad
 ### Olimpiadadan oldin
 - **🔔 Telegram xabarnomalar** → «Akkaunt ulash» → havolani bosing. Botda `/stat` ishlashini tekshiring.
 - **UptimeRobot**ni ulang (shu sahifadagi yo'riqnoma) — server to'xtasa darhol xabar keladi.
+- **🪑 Joylashtirish**: Xonalar (bino, so'ng «101-110» kabi birdaniga) → Smenalar («Avtomatik yaratish») →
+  ro'yxat yopilgach **Taqsimot → Taqsimlash** → xonalarni ko'zdan kechiring → **Ruxsatnoma → Rejalashtirish**
+  (har o'quvchiga olimpiadadan bir kun oldin, masalan 18:00 da). Ro'yxatdan o'tish paytida «ruxsatnoma keyin yuboriladi»
+  xabarini yoqish ham shu yerda.
+- **Chop etish**: har xona eshigiga ro'yxat + sxema (PDF), maktablar uchun Excel.
 
 ### Olimpiada kuni
 - Umumiy sozlamalarda **zaxira oralig'ini 1 soat** qiling.
@@ -171,11 +192,25 @@ Terminalda har bir kelgan xabar `Bot ← <id> (xabar: ...)` ko'rinishida yozilad
 - Hakamlar «Ball kiritish» bo'limida ishlaydi; bosh sahifada har fan bo'yicha jarayon ko'rinadi.
 - Tekshiruv tugagach fanni **qulflang** (Fanlar → «Natijalar qulflangan»).
 - «Reyting» → **«Natijalarni e'lon qilish»** → «Natijalarni botga yuborish».
-- Sertifikatlar: dizaynni tayyorlang → shablonni faol qiling → sertifikatlarni yoqing → «Sertifikatlarni yuborish».
+- Davomatda **Smena** va **Xona** filtrini tanlang — har xona nazoratchisi o'z xonasini o'rin tartibida belgilaydi.
+- Barcha ballar kiritilgach **🏅 O'rinlar va mukofotlar** → turni qulflang (o'rinlar yakuniy) va sovrinli o'rinlar sonini tekshiring.
+- Sertifikatlar: dizaynni tayyorlang → shablonni faol qiling («kimga»: sovrindorlar / ishtirokchilar) → «📋 Kim nima oladi»da tekshiring → sertifikatlarni yoqing → «Sertifikatlarni yuborish».
 - Kerak bo'lsa **⚖️ E'tirozlar**ni muddat bilan yoqing.
 
+### Titul bilan tekshiruv (ixtiyoriy)
+1. **📝 Titul va skaner → Fanlar va kalitlar**: fanda «Titul bilan avtomatik tekshirish»ni yoqing, variantlar sonini tanlang.
+   Fanning baholash usuli «Bir xil ball» yoki «Har xil ball» bo'lishi kerak (savollar soni titulga yoziladi).
+2. **Joylashtirishdan keyin** «Titullarni chop etish» → PDF (smena/xona/o'rin tartibida). **100% masshtabda** chop eting
+   (printerda «Fit to page» o'chirilgan). Kesib, xona bo'yicha nazoratchilarga bering.
+3. Olimpiadadan oldin 10–20 ta titulni to'ldirib, telefoningizda sinab ko'ring (yorug' joy, titul ramkaga to'liq sig'sin).
+4. Olimpiada kuni: o'quvchi ismini kitobchaga yozadi, titulga faqat **ID sini** belgilaydi. Hakam faqat titulni oladi.
+5. Hakamlar **📷 Skaner** sahifasini telefonda ochadi (o'z login/paroli bilan) va titullarni birma-bir kameraga tutadi.
+6. Kalitni kiriting («Kalitni saqlash va hisoblash») — hamma skanerlangan ishlar ballanadi.
+7. **🔎 Tekshirish kerak** navbatini nolga tushiring (ID mos kelmagan, bo'sh, aniq o'qilmagan ishlar).
+8. «Ishlar» bo'limidan tekshirilgan titullarni o'quvchilarga botda yuborish mumkin.
+
 ### Olimpiadadan keyin
-- **🗄 Arxiv va tozalash** → «To'liq Excel yuklab olish», sertifikatlar ZIP va baza zaxirasini kompyuteringizga saqlang.
+- **🗄 Arxiv va tozalash** → «To'liq Excel yuklab olish» (o'rinlar varag'i ham bor), sertifikatlar PDF/ZIP va baza zaxirasini kompyuteringizga saqlang.
 - Yangi olimpiadadan oldin shu sahifada eski ma'lumotlarni tozalang.
 
 ---

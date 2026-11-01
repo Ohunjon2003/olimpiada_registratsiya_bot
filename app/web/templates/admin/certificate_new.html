@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Yangi shablon{% endblock %}
+{% block crumbs %}<a href="/admin/certificates">Sertifikatlar</a> / Yangi shablon{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ 'Yangi ruxsatnoma shabloni' if kind == 'pass' else 'Yangi sertifikat yoki diplom' }}</h1>
+    <div class="muted">Tayyor dizaynni tanlang — keyin ranglar, matnlar, rasmlarni istalgancha o'zgartirasiz.
+      {% if kind != 'pass' %}Canva'da tayyorlagan rasmingiz bo'lsa — «Bo'sh» shablonni tanlab, uni fon qilib yuklang.{% endif %}</div></div>
+</div>
+<div class="tpl-grid">
+  {% for key, title in presets %}
+  <form method="post" action="/admin/certificates/new" class="tpl-card pick">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="preset" value="{{ key }}">
+    <button class="tpl-thumb" title="Tanlash"><img src="/admin/certificates/preset/{{ key }}.png" alt="{{ title }}"></button>
+    <div class="tpl-body"><b>{{ title }}</b></div>
+  </form>
+  {% endfor %}
+</div>
+{% endblock %}

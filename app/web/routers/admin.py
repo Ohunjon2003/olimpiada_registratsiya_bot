@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import config
 from ...db import get_session
-from ...models import (AuditLog, Channel, Grade, Participant, Result, School,
-                       Subject, User, participant_subjects)
+from ...models import (Attendance, AuditLog, Broadcast, Channel, Grade, Participant,
+                       Result, School, SeatAssignment, SheetScan, Subject, User,
+                       participant_subjects)
 from ...security import hash_password, password_problem
 from ...services import audit, backup, ranking
 from ...services import settings as st
@@ -75,7 +76,9 @@ async def dashboard(request: Request, user: User = Depends(require_admin),
             progress.append({"subject": subj, "total": n, "entered": entered.get(sid, 0)})
     channels_n = (await session.execute(select(func.count()).select_from(Channel)
                                         .where(Channel.is_active == True))).scalar_one()
+    steps = await _steps(session, cur, active, progress)
     return render(request, "admin/dashboard.html", {
+        "steps": steps,
         "total": total, "active": active, "today": today, "reg_state": st.registration_state(),
         "chart": {"days": days, "daily": [counts[d] for d in days],
                   "grades": [list(r) for r in by_grade], "schools": [list(r) for r in by_school],
@@ -83,6 +86,59 @@ async def dashboard(request: Request, user: User = Depends(require_admin),
         "progress": progress, "round": cur, "channels_n": channels_n,
         "channel_errors": _channel_errors(),
     })
+
+
+async def _count(session: AsyncSession, stmt) -> int:
+    return (await session.execute(stmt)).scalar_one() or 0
+
+
+async def _steps(session: AsyncSession, cur, active: int, progress: list[dict]) -> list[dict]:
+    """Olimpiada bosqichlari: har biri uchun holat (done | doing | todo), qisqa izoh va havola.
+
+    Admin bosh sahifada «qaysi ish qoldi»ni bir qarashda ko'radi.
+    """
+    def step(title, state, note, href):
+        return {"title": title, "state": state, "note": note, "href": href}
+
+    reg = st.registration_state()
+    out = [step("Ro'yxatdan o'tish", {"open": "doing", "closed": "done"}.get(reg, "todo"),
+                f"{active} faol ishtirokchi · " + {"open": "ochiq", "closed": "yopilgan"}.get(reg, "boshlanmagan"),
+                "/admin/settings")]
+    if not cur:
+        out.append(step("Tur (bosqich)", "todo", "Joriy tur belgilanmagan", "/admin/c/rounds"))
+        return out
+    rid = cur.id
+    seated = await _count(session, select(func.count()).select_from(SeatAssignment)
+                          .where(SeatAssignment.round_id == rid))
+    sent = await _count(session, select(func.count()).select_from(SeatAssignment)
+                        .where(SeatAssignment.round_id == rid, SeatAssignment.pass_sent_at.is_not(None)))
+    out.append(step("Joylashtirish (xona, o'rin)", "done" if seated and seated >= active else ("doing" if seated else "todo"),
+                    f"{seated} / {active} o'quvchiga o'rin berilgan", "/admin/seating"))
+    out.append(step("Ruxsatnomalar", "done" if seated and sent >= seated else ("doing" if sent else "todo"),
+                    f"{sent} / {seated} yuborilgan", "/admin/seating?tab=plan"))
+    present = await _count(session, select(func.count()).select_from(Attendance)
+                           .where(Attendance.round_id == rid, Attendance.present == True))
+    marked = await _count(session, select(func.count()).select_from(Attendance).where(Attendance.round_id == rid))
+    out.append(step("Davomat", "doing" if marked else "todo",
+                    f"{present} keldi · {marked - present} kelmadi" if marked else "Hali belgilanmagan", "/attendance"))
+    omr_n = await _count(session, select(func.count()).select_from(Subject).where(Subject.omr_enabled == True))
+    if omr_n:
+        applied = await _count(session, select(func.count()).select_from(SheetScan)
+                               .where(SheetScan.round_id == rid, SheetScan.status == "applied"))
+        review = await _count(session, select(func.count()).select_from(SheetScan)
+                              .where(SheetScan.round_id == rid, SheetScan.status == "review"))
+        note = f"{applied} titul yozilgan" + (f" · ⚠️ {review} ta tekshiruv kutmoqda" if review else "")
+        out.append(step("Titullarni skanerlash", "doing" if (applied or review) else "todo", note,
+                        "/admin/omr?tab=review" if review else "/admin/omr"))
+    need = sum(p["total"] for p in progress)
+    got = sum(min(p["entered"], p["total"]) for p in progress)
+    out.append(step("Natijalar", "done" if need and got >= need else ("doing" if got else "todo"),
+                    f"{got} / {need} natija kiritilgan", "/admin/ranking"))
+    certs = await _count(session, select(func.count()).select_from(Broadcast)
+                         .where(Broadcast.kind == "certificates", Broadcast.status == "done"))
+    out.append(step("Sertifikatlar", "done" if certs else "todo",
+                    "Botga yuborilgan" if certs else "Hali yuborilmagan", "/admin/certificates"))
+    return out
 
 
 def _channel_errors() -> list[tuple[str, str, str]]:

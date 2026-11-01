@@ -147,6 +147,25 @@ LAT: dict[str, str] = {
     "cert_none": "🤷 Sizga tegishli sertifikat topilmadi.",
     "cert_preparing": "⏳ Sertifikat tayyorlanmoqda... 🖨",
     "cert_caption": "🎓 {title}",
+    "cert_caption_place": "🏆 Tabriklaymiz! <b>{title}</b> fanidan <b>{place}-o'rin</b>! 🎉",
+
+    # --- Tekshirilgan titul ---
+    "sheet_caption": "📝 <b>{subject}</b> — titulingiz tekshirildi\n✅ To'g'ri javoblar: <b>{correct}</b> / {total} "
+                     "({percent}%)\n\n🟢 yashil — to'g'ri, 🔴 qizil — xato, yashil halqa — to'g'ri javob.",
+    "sheet_caption_nokey": "📝 <b>{subject}</b> — titulingiz qabul qilindi. Natija keyinroq e'lon qilinadi.",
+
+    # --- Ruxsatnoma (olimpiada kuni joy) ---
+    "btn_pass": "🎫 Ruxsatnoma",
+    "pass_notice": "🎫 Olimpiada kuni qaysi bino, xona va o'rinda o'tirishingiz ko'rsatilgan <b>ruxsatnoma</b> "
+                   "olimpiadadan bir kun oldin shu botga yuboriladi. 🔔 Botni o'chirib qo'ymang!",
+    "pass_not_ready": "⏳ Ruxsatnomalar hali tayyor emas. Olimpiadadan bir kun oldin shu yerga yuboriladi 🔔",
+    "pass_none": "🤷 Sizga hali o'rin biriktirilmagan. Savollar bo'lsa tashkilotchilarga murojaat qiling.",
+    "pass_caption": "🎫 <b>Ruxsatnoma</b> — {olympiad}\n\n👤 {name} (ID: <b>{code}</b>)\n"
+                    "📅 {date}, {weekday}\n⏰ Kelish: <b>{arrive}</b> · boshlanish: <b>{start}</b>\n"
+                    "🏫 {building}\n📍 {address}\n🚪 <b>{room}</b> · {seat}\n\n"
+                    "📲 Ruxsatnomani telefoningizda yoki chop etib olib keling. Kechikmang! 🍀",
+    "pass_changed": "⚠️ <b>Diqqat! O'rningiz o'zgardi.</b> Yangi ruxsatnoma quyida 👇",
+    "pass_map": "🗺 Xaritada ko'rish",
 
     # --- E'tiroz (apellyatsiya) ---
     "btn_appeal": "⚖️ E'tiroz",
@@ -260,6 +279,17 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         ("results_none", "Natija yo'q"), ("cert_not_ready", "Sertifikat tayyor emas"),
         ("cert_none", "Sertifikat yo'q"), ("cert_preparing", "Sertifikat tayyorlanmoqda"),
         ("cert_caption", "Sertifikat izohi"),
+        ("cert_caption_place", "Sertifikat izohi — sovrindorga (o'rni bilan tabrik)"),
+    ]),
+    ("📝 Tekshirilgan titul", [
+        ("sheet_caption", "Titul rasmi izohi (ball bilan)"), ("sheet_caption_nokey", "Titul rasmi izohi (kalitsiz)"),
+    ]),
+    ("🎫 Ruxsatnoma", [
+        ("btn_pass", "Tugma: ruxsatnoma (menyuda, ruxsatnomalar e'lon qilingach)"),
+        ("pass_notice", "Ro'yxatdan o'tgach: ruxsatnoma keyin yuborilishi haqida (yoqilgan bo'lsa)"),
+        ("pass_caption", "Ruxsatnoma izohi"), ("pass_changed", "O'rin o'zgargach"),
+        ("pass_not_ready", "Ruxsatnoma hali tayyor emas"), ("pass_none", "O'rin biriktirilmagan"),
+        ("pass_map", "Xarita tugmasi matni"),
     ]),
     ("⚖️ E'tirozlar", [
         ("btn_appeal", "Tugma: e'tiroz (menyuda, e'tirozlar ochiq bo'lsa)"),

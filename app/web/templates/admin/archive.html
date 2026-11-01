@@ -22,11 +22,11 @@
     <li><b>Ishtirokchilar</b> — barcha ma'lumotlar, qo'shimcha savollar javoblari va davomat</li>
     <li><b>Har bir fan va blok reytingi</b> (har tur uchun alohida varaq, g'oliblar rangli)</li>
     <li><b>Barcha natijalar</b> — kim, qaysi fandan, necha ball, qaysi hakam kiritgan</li>
-    <li><b>Davomat</b> va <b>E'tirozlar</b></li>
+    <li><b>Davomat</b>, <b>O'rinlar</b> (kim qayerda o'tirgan) va <b>E'tirozlar</b></li>
   </ul>
   <div class="btns">
     <a class="btn primary" href="/admin/archive/export">⬇️ To'liq Excel yuklab olish</a>
-    <a class="btn" href="/admin/certificates">🎓 Sertifikatlar (ZIP)</a>
+    <a class="btn" href="/admin/certificates/review">🎓 Sertifikatlar (PDF/ZIP)</a>
     <a class="btn" href="/admin/backups">💾 Baza zaxirasi (.db)</a>
   </div>
 </div>
@@ -41,9 +41,9 @@
     Maktablar, sinflar, fanlar, kanallar, nizom, hakamlar, matnlar va sertifikat dizaynlari <b>saqlanib qoladi</b>.
   </div>
   <label class="check field"><input type="checkbox" name="what" value="participants" checked>
-    <b>Barcha ishtirokchilar</b> va ularga tegishli hamma narsa: natijalar, davomat, e'tirozlar ({{ c.participants }} ta). Yangi o'quvchilar ID raqami yana 0001 dan boshlanadi.</label>
+    <b>Barcha ishtirokchilar</b> va ularga tegishli hamma narsa: natijalar, davomat, e'tirozlar, o'rinlar ({{ c.participants }} ta). Yangi o'quvchilar ID raqami yana 0001 dan boshlanadi.</label>
   <label class="check field"><input type="checkbox" name="what" value="results">
-    Faqat natijalar, davomat va e'tirozlar — o'quvchilar ro'yxati qoladi <span class="muted">(olimpiadani qayta o'tkazish uchun)</span></label>
+    Faqat natijalar, davomat, e'tirozlar, o'rinlar va skanerlangan titullar — o'quvchilar ro'yxati qoladi <span class="muted">(olimpiadani qayta o'tkazish uchun)</span></label>
   <label class="check field"><input type="checkbox" name="what" value="broadcasts" checked> Ommaviy xabarlar tarixi ({{ c.broadcasts }} ta)</label>
   <label class="check field"><input type="checkbox" name="what" value="audit"> Jurnal (kim nimani o'zgartirgani, {{ c.audit }} ta yozuv)</label>
   <label class="check field"><input type="checkbox" name="what" value="flags" checked>

@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}Joylashtirish{% endblock %}
+{% block crumbs %}Joylashtirish{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🪑 Joylashtirish va ruxsatnoma</h1>
+    <div class="muted">Xonalar va smenalarni kiriting → «Taqsimlash» → o'quvchilarga ruxsatnoma (qayerda, qachon o'tirishi) bot orqali boradi.</div></div>
+  {% if rounds|length > 1 %}
+  <form method="get" class="inline"><input type="hidden" name="tab" value="{{ tab }}">
+    <select name="round_id" onchange="this.form.submit()">{% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></form>
+  {% endif %}
+</div>
+
+<div class="grid g4 mb">
+  <div class="card stat"><div class="v">{{ stats.eligible }}</div><div class="l">Qatnashadigan o'quvchi</div></div>
+  <div class="card stat"><div class="v">{{ stats.per_session }} × {{ stats.sessions }}</div><div class="l">O'rin × smena = <b>{{ stats.capacity }}</b> joy</div></div>
+  <div class="card stat"><div class="v">{{ stats.assigned }}</div><div class="l">Joy biriktirilgan{% if stats.unassigned %} · <span class="badge warn">{{ stats.unassigned }} ta joylanmagan</span>{% endif %}</div></div>
+  <div class="card stat"><div class="v">{{ stats.sent }}</div><div class="l">Ruxsatnoma yuborilgan</div></div>
+</div>
+{% if stats.per_session and stats.eligible > stats.capacity %}
+<div class="alert warn">⚠️ Joy yetmaydi: {{ stats.eligible }} o'quvchiga kamida <b>{{ stats.need_sessions }} ta smena</b> kerak (hozir {{ stats.sessions }} ta) yoki ko'proq xona qo'shing.</div>
+{% endif %}
+
+<div class="tabs mb">
+  {% for k, l in tabs.items() %}<a href="?tab={{ k }}&round_id={{ round.id }}" class="{% if tab == k %}active{% endif %}">{{ l }}</a>{% endfor %}
+</div>
+
+{# ------------------------------------------------------------------ XONALAR #}
+{% if tab == 'rooms' %}
+<div class="grid g2">
+  <div>
+    {% for b in buildings %}
+    <div class="card mb">
+      <div class="page-head" style="margin:0 0 8px">
+        <div><h2 style="margin:0">🏫 {{ b.name }}</h2><div class="muted small">{{ b.address or 'manzil kiritilmagan' }}{% if b.map_url %} · <a href="{{ b.map_url }}" target="_blank" rel="noopener">xarita</a>{% endif %}</div></div>
+        <details class="inline-edit"><summary class="btn sm">✏️</summary>
+          <form method="post" action="/admin/seating/building" class="mt-s"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ b.id }}">
+            <div class="field"><label>Nomi</label><input type="text" name="name" value="{{ b.name }}" required></div>
+            <div class="field"><label>Manzil</label><input type="text" name="address" value="{{ b.address }}"></div>
+            <div class="field"><label>Xarita havolasi (Google/Yandex)</label><input type="url" name="map_url" value="{{ b.map_url }}" placeholder="https://maps.google.com/..."></div>
+            <div class="field"><label>Nomi (kirill, ixtiyoriy)</label><input type="text" name="name_cyr" value="{{ b.name_cyr }}"></div>
+            <div class="field"><label>Manzil (kirill, ixtiyoriy)</label><input type="text" name="address_cyr" value="{{ b.address_cyr }}"></div>
+            <div class="btns"><button class="btn sm primary">Saqlash</button></div></form>
+          <form method="post" action="/admin/seating/building/{{ b.id }}/delete" class="mt-s" data-confirm="Bino o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">🗑 Binoni o'chirish</button></form>
+        </details>
+      </div>
+      {% set brooms = rooms|selectattr('building_id', 'equalto', b.id)|list %}
+      {% if brooms %}
+      <div class="room-chips">
+        {% for r in brooms %}<a href="/admin/seating/room/{{ r.id }}?round_id={{ round.id }}" class="room-chip {{ '' if r.is_active else 'off' }}">
+          <b>{{ r.name }}</b><small>{{ r.rows }}×{{ r.desks }}×{{ r.seats_per_desk }} = {{ caps[r.id] }}{% if not r.is_active %} · nofaol{% endif %}</small></a>{% endfor %}
+      </div>
+      <div class="muted small mt-s">Jami: {{ brooms|length }} xona, {{ bcap.get(b.id, 0) }} o'rin (smenada). Xonani bosing — sxema, tahrirlash, singan o'rinni o'chirish.</div>
+      {% else %}<div class="muted small">Xonalar yo'q — o'ngdagi formadan qo'shing.</div>{% endif %}
+    </div>
+    {% else %}
+    <div class="card empty mb">Hali bino yo'q. O'ngdan qo'shing.</div>
+    {% endfor %}
+  </div>
+  <div>
+    <form method="post" action="/admin/seating/rooms/bulk" class="card mb">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h2>＋ Xonalar qo'shish</h2>
+      <div class="field"><label>Bino</label><select name="building_id" required>{% for b in buildings %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Xona nomlari</label><input type="text" name="names" placeholder="101-110, 201-205, Akt zali" required>
+        <div class="help">Oraliq yozsangiz (101-110) — har biri alohida xona bo'ladi. Vergul bilan ajrating.</div></div>
+      <div class="grid g3">
+        <div class="field"><label>Qatorlar</label><input type="number" name="rows" value="5" min="1" max="30"></div>
+        <div class="field"><label>Qatorda parta</label><input type="number" name="desks" value="3" min="1" max="12"></div>
+        <div class="field"><label>Partada o'rin</label><select name="seats_per_desk"><option value="2" selected>2</option><option value="1">1</option><option value="3">3</option></select></div>
+      </div>
+      <div class="field"><label>Qavat</label><select name="floor"><option value="auto">Nomidan (101 → 1-qavat)</option><option value="">Ko'rsatilmasin</option>
+        {% for f in range(1, 6) %}<option value="{{ f }}">{{ f }}-qavat</option>{% endfor %}</select></div>
+      <div class="help mb">Masalan: 5 qator × 3 parta × 2 o'rin = 30 o'rin. Har xona sxemasida keyin o'zgartirish mumkin.</div>
+      <div class="btns"><button class="btn primary" {% if not buildings %}disabled{% endif %}>Qo'shish</button></div>
+    </form>
+    <form method="post" action="/admin/seating/building" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h2>＋ Bino qo'shish</h2>
+      <div class="field"><label>Nomi</label><input type="text" name="name" placeholder="Masalan: Haziniy maktabi" required></div>
+      <div class="field"><label>Manzil</label><input type="text" name="address" placeholder="Uchko'prik tumani, ..."></div>
+      <div class="field"><label>Xarita havolasi (ixtiyoriy)</label><input type="url" name="map_url" placeholder="https://maps.google.com/..."><div class="help">Ruxsatnoma xabarida «🗺 Xaritada ko'rish» tugmasi bo'ladi.</div></div>
+      <div class="btns"><button class="btn">Qo'shish</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ SMENALAR #}
+{% if tab == 'sessions' %}
+<div class="grid g2">
+  <div>
+    <div class="table-wrap mb"><table>
+      <thead><tr><th>Smena</th><th>Sana</th><th>Kelish</th><th>Boshlanish</th><th>Davomiylik</th><th>O'quvchi</th><th></th></tr></thead>
+      <tbody>
+      {% for s in sessions %}
+      <tr><td><b>{{ s.name }}</b></td><td>{{ s.day.strftime('%d.%m.%Y') }}</td><td>{{ s.arrive_time }}</td><td>{{ s.start_time }}</td><td>{{ s.duration_min }} daq.</td>
+        <td>{{ per_session.get(s.id, 0) }} / {{ stats.per_session }}</td>
+        <td class="right nowrap">
+          <details class="inline-edit"><summary class="btn sm">✏️</summary>
+            <form method="post" action="/admin/seating/session" class="mt-s card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+              <div class="grid g2"><div class="field"><label>Nomi</label><input type="text" name="name" value="{{ s.name }}"></div>
+              <div class="field"><label>Sana</label><input type="date" name="day" value="{{ s.day.isoformat() }}"></div>
+              <div class="field"><label>Kelish</label><input type="time" name="arrive_time" value="{{ s.arrive_time }}"></div>
+              <div class="field"><label>Boshlanish</label><input type="time" name="start_time" value="{{ s.start_time }}"></div>
+              <div class="field"><label>Davomiylik (daq.)</label><input type="number" name="duration_min" value="{{ s.duration_min }}" min="10" max="600"></div></div>
+              <div class="btns"><button class="btn sm primary">Saqlash</button></div></form>
+            <form method="post" action="/admin/seating/session/{{ s.id }}/delete" class="mt-s" data-confirm="Smena o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">🗑 O'chirish</button></form>
+          </details></td></tr>
+      {% else %}<tr><td colspan="7" class="empty">Smenalar yo'q</td></tr>{% endfor %}
+      </tbody></table></div>
+    <p class="muted small">Bir smenada barcha xonalar ishlatiladi. Har o'quvchi o'z fanlarini bitta smenada yozadi.</p>
+  </div>
+  <div>
+    <form method="post" action="/admin/seating/sessions/generate" class="card mb">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <h2>⚡️ Avtomatik yaratish</h2>
+      <div class="help mb">{{ stats.eligible }} o'quvchi, smenada {{ stats.per_session }} o'rin → kamida <b>{{ stats.need_sessions or 1 }}</b> smena kerak.</div>
+      <div class="grid g2">
+        <div class="field"><label>Nechta smena</label><input type="number" name="count" value="{{ [stats.need_sessions or 1, 1]|max }}" min="1" max="40"></div>
+        <div class="field"><label>Birinchi kun</label><input type="date" name="start_day" value="{{ (today).isoformat() }}" required></div>
+        <div class="field"><label>Kuniga boshlanish vaqtlari</label><input type="text" name="times" value="09:00, 13:00" required><div class="help">Vergul bilan: 2 ta vaqt — kuniga 2 smena.</div></div>
+        <div class="field"><label>Necha daqiqa oldin kelish</label><input type="number" name="arrive_before" value="30" min="0" max="180"></div>
+        <div class="field"><label>Davomiyligi (daq.)</label><input type="number" name="duration_min" value="120" min="10" max="600"></div>
+      </div>
+      <label class="check field"><input type="checkbox" name="skip_sunday" checked> Yakshanbani o'tkazib yuborish</label>
+      <div class="btns"><button class="btn primary">Yaratish</button></div>
+    </form>
+    <form method="post" action="/admin/seating/session" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <h2>＋ Bitta smena</h2>
+      <div class="grid g2">
+        <div class="field"><label>Nomi</label><input type="text" name="name" value="{{ sessions|length + 1 }}-smena" required></div>
+        <div class="field"><label>Sana</label><input type="date" name="day" required></div>
+        <div class="field"><label>Kelish</label><input type="time" name="arrive_time" value="08:30"></div>
+        <div class="field"><label>Boshlanish</label><input type="time" name="start_time" value="09:00"></div>
+        <div class="field"><label>Davomiylik (daq.)</label><input type="number" name="duration_min" value="120" min="10" max="600"></div>
+      </div>
+      <div class="btns"><button class="btn">Qo'shish</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ TAQSIMOT #}
+{% if tab == 'plan' %}
+<div class="grid g2 mb">
+  <form method="post" action="/admin/seating/options" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+    <h2>⚙️ Taqsimlash qoidalari</h2>
+    <label class="check field"><input type="checkbox" name="one_per_desk" {% if one %}checked{% endif %}> Har partaga <b>1 kishi</b> (2 kishilik partalarda ikkinchi o'rin bo'sh qoladi)</label>
+    <div class="field"><label>Guruhlash</label><select name="group_by">
+      <option value="none" {% if setting('seating_group_by') == 'none' %}selected{% endif %}>Yo'q — aralash (maktablar eng yaxshi ajraladi)</option>
+      <option value="grade" {% if setting('seating_group_by') == 'grade' %}selected{% endif %}>Sinf bo'yicha (bir sinf — bir smena/xonalarda)</option>
+      <option value="subject" {% if setting('seating_group_by') == 'subject' %}selected{% endif %}>Fanlar to'plami bo'yicha (savol varaqlarini tarqatish oson)</option>
+      <option value="school_order" {% if setting('seating_group_by') == 'school_order' %}selected{% endif %}>Maktablar tartibida (1-smena: birinchi maktablar, 2-smena: keyingilari…)</option></select>
+      <div class="help">«Maktablar tartibida»: tartib «🏫 Maktablar» ro'yxatidagi joylashuv bo'yicha (▲▼ bilan o'zgartiriladi). Maktab smenalarga bo'linmaydi — faqat juda katta bo'lsa.</div></div>
+    <div class="help mb">Har doim: bir maktab o'quvchilari xonalarga tekis tarqatiladi, bir xonaga tushsa — yonma-yon, bir partada va old-orqada o'tirmaydi.</div>
+    <div class="btns"><button class="btn">Saqlash</button></div>
+  </form>
+  <div class="card">
+    <h2>▶️ Taqsimlash</h2>
+    {% if stats.sent %}
+      <div class="alert info small">{{ stats.sent }} ta o'quvchiga ruxsatnoma yuborilgan — to'liq qayta taqsimlab bo'lmaydi. Keyin qo'shilganlarni bo'sh joylarga qo'ying.</div>
+    {% else %}
+    <form method="post" action="/admin/seating/run" data-confirm="{{ 'Mavjud taqsimot o\'chirilib, hammasi qaytadan joylanadi. Davom etaymi?' if stats.assigned else 'Taqsimlaymi?' }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <button class="btn primary" {% if not stats.sessions or not stats.per_session %}disabled{% endif %}>🪑 {{ 'Qaytadan taqsimlash' if stats.assigned else 'Taqsimlash' }}</button>
+    </form>
+    <p class="muted small">Ro'yxatdan o'tish tugagach bosing. Bir necha soniya oladi.</p>
+    {% endif %}
+    <form method="post" action="/admin/seating/fill" class="mt-s">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <button class="btn" {% if not stats.assigned %}disabled{% endif %}>➕ Joylanmaganlarni joylash{% if stats.unassigned %} ({{ stats.unassigned }}){% endif %}</button>
+    </form>
+    <p class="muted small">Taqsimotdan keyin ro'yxatdan o'tganlar bo'sh joylarga qo'yiladi, boshqalarning joyi o'zgarmaydi.{% if stats.stale %} Chetlatilgan {{ stats.stale }} ta o'quvchining o'rni ham bo'shatiladi.{% endif %}</p>
+    {% if stats.assigned %}
+    <details class="mt"><summary class="small muted">🗑 Taqsimotni bekor qilish</summary>
+      <form method="post" action="/admin/seating/reset" class="filters mt-s" data-confirm="Barcha joylar o'chiriladi. Ishonchingiz komilmi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+        <div><label class="small">Parolingiz</label><input type="password" name="password" required autocomplete="current-password"></div>
+        <div class="btns"><button class="btn danger">Bekor qilish</button></div>
+      </form>
+      {% if stats.sent %}<div class="help">Diqqat: ruxsatnoma olganlar eski joyini ko'radi — keyin qayta yuborish kerak bo'ladi.</div>{% endif %}
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+{% if grid %}
+<div class="card mb">
+  <h2>Natija {% if total_pen == 0 %}<span class="badge ok">bir maktabdan qo'shni yo'q 👍</span>{% else %}<span class="badge warn">ba'zi xonalarda qo'shnilar bor</span>{% endif %}</h2>
+  <p class="muted small">Xonani bosing — o'tirish sxemasi (maktablar rangda). Qizil raqam — bir maktabdan yaqin o'tirgan juftliklar soni.</p>
+  {% for s in sessions %}
+  <h3 class="mt">{{ s.name }} · {{ s.day.strftime('%d.%m.%Y') }} {{ s.start_time }} <span class="muted small">({{ per_session.get(s.id, 0) }} o'quvchi)</span></h3>
+  {% set ss = session_schools.get(s.id, []) %}
+  {% if ss %}<details class="small mb"><summary class="muted">🏫 {{ ss|length }} ta maktab: {{ ss[0][0] }}{% if ss|length > 1 %} … {{ ss[-1][0] }}{% endif %}</summary>
+    <div class="muted">{% for n, c in ss %}{{ n }} ({{ c }}){{ ', ' if not loop.last }}{% endfor %}</div></details>{% endif %}
+  <div class="room-chips">
+    {% for r in rooms if r.is_active %}{% set g = grid.get((s.id, r.id)) %}
+    <a href="/admin/seating/room/{{ r.id }}?session_id={{ s.id }}&round_id={{ round.id }}" class="room-chip {{ 'bad' if g and g.pairs else '' }} {{ '' if g else 'empty' }}">
+      <b>{{ r.name }}</b><small>{{ g.n if g else 0 }}/{{ caps[r.id] }}{% if g %} · {{ g.schools }} maktab{% endif %}{% if g and g.pairs %} · <span class="err-text">⚠ {{ g.pairs }}</span>{% endif %}</small></a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+{# ------------------------------------------------------------------ RUXSATNOMA #}
+{% if tab == 'pass' %}
+<div class="grid g2 mb">
+  <div class="card">
+    <h2>🎫 Ruxsatnoma shabloni</h2>
+    {% if pass_tpl %}
+      <a href="/admin/certificates/{{ pass_tpl.id }}"><img src="/admin/certificates/{{ pass_tpl.id }}/preview.png?w=600&v={{ pass_tpl.design_json|length }}" alt="" style="max-width:100%;max-height:360px;border:1px solid var(--line)"></a>
+      <div class="btns mt-s"><a class="btn" href="/admin/certificates/{{ pass_tpl.id }}">✏️ Dizaynni o'zgartirish</a></div>
+    {% else %}<div class="alert warn">Faol ruxsatnoma shabloni yo'q. «🎓 Sertifikatlar» → «🎫 Ruxsatnoma» bo'limida yarating va faol qiling.</div>{% endif %}
+  </div>
+  <form method="post" action="/admin/seating/pass-settings" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+    <h2>⚙️ Sozlamalar</h2>
+    <div class="field"><label>Yuborish vaqti (olimpiadadan bir kun oldin)</label><input type="time" name="pass_send_time" value="{{ setting('pass_send_time') }}"></div>
+    <label class="check field"><input type="checkbox" name="pass_notice" {% if setting('pass_notice') %}checked{% endif %}> Ro'yxatdan o'tgan zahoti «ruxsatnoma bir kun oldin yuboriladi» deb aytish</label>
+    <label class="check field"><input type="checkbox" name="passes_published" {% if setting('passes_published') %}checked{% endif %}> Botda «🎫 Ruxsatnoma» tugmasi ko'rinsin <span class="muted">(birinchi yuborishda avtomatik yoqiladi)</span></label>
+    <div class="btns"><button class="btn">Saqlash</button></div>
+  </form>
+</div>
+
+<div class="card mb">
+  <h2>📤 Yuborish</h2>
+  {% if not stats.assigned %}<div class="alert warn">Avval «🪑 Taqsimot» bo'limida o'quvchilarni joylang.</div>{% endif %}
+  <div class="grid g2">
+    <div>
+      <h3>📅 Avtomatik (tavsiya)</h3>
+      {% if days %}
+      <p class="small">Har o'quvchiga o'z olimpiada kunidan <b>bir kun oldin soat {{ setting('pass_send_time') }}</b> da:</p>
+      <ul class="small">{% for d in days %}<li>{{ d.strftime('%d.%m.%Y') }} kuni yozadiganlarga → <b>{{ send_at[d]|dt }}</b></li>{% endfor %}</ul>
+      <form method="post" action="/admin/seating/schedule" data-confirm="Ruxsatnomalar ko'rsatilgan vaqtlarda avtomatik yuboriladi. Rejalashtiraymi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+        <button class="btn primary" {% if not stats.assigned or not pass_tpl %}disabled{% endif %}>📅 Rejalashtirish</button></form>
+      <p class="muted small">Faqat hali ruxsatnoma olmaganlarga yuboriladi. Qayta bossangiz — eski reja bekor bo'lib, yangisi tuziladi.</p>
+      {% else %}<p class="muted small">Smenalar yo'q.</p>{% endif %}
+    </div>
+    <div>
+      <h3>⚡️ Hozir</h3>
+      <form method="post" action="/admin/seating/send-now" data-confirm="Hozir yuboraymi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+        <div class="btns">
+          <button class="btn" name="mode" value="unsent" {% if not stats.assigned or not pass_tpl %}disabled{% endif %}>Olmaganlarga yuborish ({{ stats.assigned - stats.sent }})</button>
+          <button class="btn" name="mode" value="all" {% if not stats.assigned or not pass_tpl %}disabled{% endif %}>Hammaga qayta</button>
+        </div></form>
+      <p class="muted small">Bitta o'quvchiga — uning sahifasidagi «🎫 Ruxsatnomani yuborish» tugmasi. Joyi o'zgartirilsa — yangisi avtomatik boradi.</p>
+    </div>
+  </div>
+  {% if passes %}
+  <h3 class="mt">Yuborishlar</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Kimga</th><th>Vaqti</th><th>Holat</th><th>Yuborildi</th><th>Xato</th></tr></thead>
+    <tbody>{% for b in passes %}
+      <tr><td>{{ b.id }}</td><td class="small">{{ b.text }}</td><td>{{ b.scheduled_at|dt }}</td>
+        <td>{% if b.status == 'done' %}<span class="badge ok">tugadi</span>{% elif b.status == 'sending' %}<span class="badge blue">yuborilmoqda</span>{% elif b.status == 'scheduled' %}<span class="badge warn">rejada</span>{% else %}<span class="badge">bekor</span>{% endif %}</td>
+        <td>{{ b.sent }}{% if b.total %} / {{ b.total }}{% endif %}</td><td>{{ b.failed }}</td></tr>
+    {% endfor %}</tbody></table></div>
+  <p class="muted small">To'liq ro'yxat va bekor qilish — «📣 Xabar yuborish» sahifasida.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ CHOP ETISH #}
+{% if tab == 'print' %}
+<div class="grid g2">
+  <div class="card">
+    <h2>🚪 Xona eshigiga ro'yxat</h2>
+    <p class="muted small">Har xona uchun: o'quvchilar ro'yxati (o'rin, ID, ism, maktab, imzo ustuni) va o'tirish sxemasi. A4, bitta PDF.</p>
+    <form hx-post="/admin/seating/print" hx-target="#job" hx-swap="innerHTML" class="filters">
+      <input type="hidden" name="round_id" value="{{ round.id }}">
+      <div><label class="small">Smena</label><select name="session_id"><option value="">Barcha smenalar</option>{% for s in sessions %}<option value="{{ s.id }}">{{ s.name }} · {{ s.day.strftime('%d.%m') }} {{ s.start_time }}</option>{% endfor %}</select></div>
+      <div class="btns"><button class="btn primary" {% if not stats.assigned %}disabled{% endif %}>🖨 PDF tayyorlash</button></div>
+    </form>
+    <div id="job"></div>
+  </div>
+  <div class="card">
+    <h2>📊 Excel</h2>
+    <p class="muted small">Barcha o'rinlar bitta varaqda + har maktab alohida varaqda (maktab o'qituvchisiga yuborish uchun).</p>
+    <a class="btn" href="/admin/seating/export.xlsx?round_id={{ round.id }}">⬇️ Excel yuklab olish</a>
+    <h3 class="mt">🙋 Olimpiada kuni</h3>
+    <p class="muted small">«Davomat» sahifasida smena va xona bo'yicha filtr bor — har xona nazoratchisi faqat o'z xonasini belgilaydi.</p>
+    <a class="btn" href="/attendance">🙋 Davomatga o'tish</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

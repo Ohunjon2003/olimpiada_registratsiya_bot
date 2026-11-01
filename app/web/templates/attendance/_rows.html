@@ -1,10 +1,10 @@
 {# Jadval tanasi (qidiruv/filtr natijasi) #}
 {% for p in rows %}
-  {% with st = status.get(p.id), oob = false %}{% include "attendance/_row.html" %}{% endwith %}
+  {% with st = status.get(p.id), oob = false, seat = seats.get(p.id, '') %}{% include "attendance/_row.html" %}{% endwith %}
 {% else %}
-  <tr><td colspan="6" class="empty">🤷 Hech kim topilmadi. Boshqacha yozib ko'ring yoki filtrlarni tozalang.</td></tr>
+  <tr><td colspan="7" class="empty">🤷 Hech kim topilmadi. Boshqacha yozib ko'ring yoki filtrlarni tozalang.</td></tr>
 {% endfor %}
 {% if total > limit %}
-  <tr><td colspan="6" class="empty small">Yana {{ total - limit }} ta o'quvchi bor — qidiruvga yozing yoki filtr tanlang.</td></tr>
+  <tr><td colspan="7" class="empty small">Yana {{ total - limit }} ta o'quvchi bor — qidiruvga yozing yoki filtr tanlang.</td></tr>
 {% endif %}
 {% if oob %}{% include "attendance/_counts.html" %}{% endif %}

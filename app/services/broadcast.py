@@ -3,7 +3,8 @@
 Turlari:
   * message      — oddiy matn (+ rasm) filtrlangan ishtirokchilarga
   * results      — har bir ishtirokchiga o'z natijasi
-  * certificates — har bir ishtirokchiga o'z sertifikatlari (PDF)
+  * certificates — har bir ishtirokchiga o'z sertifikatlari (rasm + PDF, sovrindorga o'rni bilan tabrik)
+  * passes       — ruxsatnoma (olimpiada kuni: sana, vaqt, bino, xona, o'rin)
 
 Telegram cheklovi: ~30 xabar/sekund. Biz sekundiga BROADCAST_RATE (standart 20)
 ta yuboramiz. Server qayta ishga tushsa, yuborish to'xtagan joyidan davom etadi.
@@ -25,6 +26,7 @@ from ..db import session_scope
 from ..models import Broadcast, Participant
 from ..utils import by_lang, now_utc
 from . import certificates as certs
+from . import settings as st
 from .participants import ParticipantFilter, apply_filter
 
 log = logging.getLogger("broadcast")
@@ -70,6 +72,62 @@ async def _send_with_retry(coro_factory) -> str:
     return "fail"
 
 
+async def send_certificate(bot, p: Participant, it) -> str:
+    """Bitta sertifikat: rasm (telefonda ko'rish uchun) + PDF (chop etish uchun). 'ok' | 'blocked' | 'fail'."""
+    from . import design as dz
+    img = await asyncio.to_thread(it.render)
+    jpg = await asyncio.to_thread(dz.to_jpeg, img)
+    pdf = await asyncio.to_thread(dz.to_pdf, img, certs.template_dpi(it.template))
+    caption = certs.caption_for(it, p.lang)
+    status = await _send_with_retry(lambda: bot.send_photo(
+        p.telegram_id, BufferedInputFile(jpg, filename=it.filename.replace(".pdf", ".jpg")), caption=caption))
+    if status != "ok":
+        return status
+    return await _send_with_retry(lambda: bot.send_document(
+        p.telegram_id, BufferedInputFile(pdf, filename=it.filename)))
+
+
+async def send_sheets(bot, session, p: Participant, b: Broadcast) -> str:
+    """Tekshirilgan titul(lar) — rasm: to'g'ri yashil, xato qizil."""
+    from sqlalchemy import select as _select
+    from ..bot.texts import t
+    from ..models import SheetScan
+    from . import omr_service as osvc
+    flt = json.loads(b.filters_json or "{}")
+    q = _select(SheetScan).where(SheetScan.participant_id == p.id, SheetScan.status == "applied")
+    if b.round_id:
+        q = q.where(SheetScan.round_id == b.round_id)
+    if str(flt.get("sheet_subject") or "").isdigit():
+        q = q.where(SheetScan.subject_id == int(flt["sheet_subject"]))
+    scans = (await session.execute(q)).scalars().all()
+    if not scans:
+        return "skip"
+    status = "skip"
+    for sc in scans[:10]:
+        keys = await osvc.keys_for(session, sc.subject_id, sc.round_id)
+        key = keys.get(sc.variant)
+        try:
+            img = await asyncio.to_thread(osvc.render_scan, sc, key)
+        except FileNotFoundError:
+            continue
+        from io import BytesIO
+        buf = BytesIO()
+        img.save(buf, "JPEG", quality=88)
+        name = sc.subject.name if sc.subject else ""
+        if sc.correct is not None:
+            caption = t("sheet_caption", p.lang).format(subject=name, correct=sc.correct, total=len(sc.answers),
+                                                       percent=f"{sc.percent:g}")
+        else:
+            caption = t("sheet_caption_nokey", p.lang).format(subject=name)
+        data = buf.getvalue()
+        status = await _send_with_retry(lambda: bot.send_photo(
+            p.telegram_id, BufferedInputFile(data, filename=f"titul_{p.code}_{sc.subject_id}.jpg"), caption=caption))
+        if status != "ok":
+            return status
+        sc.sent_at = now_utc()
+    return status
+
+
 async def run(broadcast_id: int) -> None:
     """Bitta xabarni yuborish (bir vaqtda faqat bittasi ishlaydi)."""
     from ..bot import loader
@@ -93,6 +151,10 @@ async def run(broadcast_id: int) -> None:
 
         photo_id: Optional[str] = None
         delay = 1.0 / max(config.BROADCAST_RATE, 1.0)
+        async with session_scope() as s:
+            templates = await certs.active_templates(s) if b.kind == "certificates" else []
+            if b.kind == "passes" and not st.get("passes_published"):
+                await st.set_many(s, {"passes_published": True})  # botda «🎫 Ruxsatnoma» tugmasi chiqadi
         batch = 50
         while True:
             async with session_scope() as s:
@@ -144,19 +206,21 @@ async def run(broadcast_id: int) -> None:
                         else:
                             status = "skip"
                     elif b.kind == "certificates":
-                        items = await certs.certificates_for(s, p)
+                        items = await certs.certificates_for(s, p, templates)
                         if not items:
                             status = "skip"
                         for it in items[:10]:
-                            pdf = await asyncio.to_thread(
-                                lambda it=it: certs.to_pdf(certs.render(it.template, it.context)))
-                            status = await _send_with_retry(
-                                lambda p=p, it=it, pdf=pdf: bot.send_document(
-                                    p.telegram_id, BufferedInputFile(pdf, filename=it.filename),
-                                    caption="🎓 " + it.title))
+                            status = await send_certificate(bot, p, it)
                             if status != "ok":
                                 break
-                            await asyncio.sleep(delay)
+                            await asyncio.sleep(delay * 2)  # har sertifikat — 2 ta xabar
+                    elif b.kind == "sheets":
+                        status = await send_sheets(bot, s, p, b)
+                        await asyncio.sleep(delay * 2)
+                    elif b.kind == "passes":
+                        from . import seating
+                        status = await seating.send_pass(bot, s, p)
+                        await asyncio.sleep(delay * 2)
 
                     if status == "ok":
                         b.sent += 1

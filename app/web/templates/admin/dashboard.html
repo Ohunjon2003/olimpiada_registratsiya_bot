@@ -30,6 +30,18 @@
   <div class="card stat"><div class="v">{{ total - active }}</div><div class="l">Chetlatilganlar</div></div>
 </div>
 
+<div class="card mb">
+  <h3>Olimpiada bosqichlari</h3>
+  <div class="flow">
+    {% for s in steps %}
+    <a class="flow-step {{ s.state }}" href="{{ s.href }}">
+      <span class="dot">{{ '✓' if s.state == 'done' else loop.index }}</span>
+      <span><b>{{ s.title }}</b><br><span class="small muted">{{ s.note }}</span></span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="grid g2 mb">
   <div class="card"><h3>Oxirgi 14 kun</h3><div class="chart-box"><canvas id="cDaily"></canvas></div></div>
   <div class="card"><h3>Sinflar bo'yicha</h3><div class="chart-box"><canvas id="cGrades"></canvas></div></div>

@@ -1,104 +1,174 @@
-"""Sertifikat va diplomlarni yaratish (Pillow).
+"""Sertifikat, diplom va ruxsatnomalar: shablonlar, o'rinlar (mukofotlar) va tayyorlash.
 
-Shablon = fon rasmi + matn maydonlari. Har bir maydon:
-  {"text": "{full_name}", "x": 50, "y": 45, "size": 4.5, "color": "#1f2937",
-   "align": "center", "font": "serif-bold", "max_width": 80}
-  x, y, size, max_width — rasm kengligi/balandligiga nisbatan foizda,
-  shuning uchun dizayner sahifasidagi joylashuv rasmdagi bilan bir xil bo'ladi.
+O'rin (mukofot) qoidalari — «🏅 O'rinlar va mukofotlar» sahifasida:
+  * har fan/blok uchun: nechta sovrinli o'rin (masalan 3) va minimal foiz (masalan 50%);
+  * reyting ballga qarab avtomatik (teng ball — teng o'rin: 1, 2, 2, 4);
+  * sovrindor: o'rni ≤ sovrinli o'rinlar soni VA foizi ≥ minimal foiz.
+Shablon «kimga» qoidasi: hammaga / sovrindorlarga / faqat N-o'ringa / ishtirokchilarga
+(sovrindor bo'lmaganlar) / 1..N o'ringa (shartsiz) / foiz bo'yicha.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from functools import lru_cache
-from io import BytesIO
-from pathlib import Path
 from typing import Optional
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import config
 from ..models import Block, CertificateTemplate, Participant, Round
-from ..utils import by_lang, fmt_num
+from ..utils import by_lang, fmt_num, lat2cyr
+from . import design as dz
+from . import design_presets as presets
 from . import ranking
 from . import settings as st
 
-FONT_DIR = Path(__file__).resolve().parent.parent / "web" / "static" / "fonts"
-FONTS = {
-    "sans": "DejaVuSans.ttf",
-    "sans-bold": "DejaVuSans-Bold.ttf",
-    "serif": "DejaVuSerif.ttf",
-    "serif-bold": "DejaVuSerif-Bold.ttf",
+# ---------------------------------------------------------------------------
+# O'zgaruvchilar ({...}) — muharrirdagi tugmalar va namuna qiymatlar
+# ---------------------------------------------------------------------------
+COMMON_PH: dict[str, tuple[str, str]] = {
+    "full_name": ("Familiya Ism", "Aliyev Azizbek"),
+    "first_name": ("Ism", "Azizbek"),
+    "last_name": ("Familiya", "Aliyev"),
+    "school": ("Maktab", "5-maktab"),
+    "grade": ("Sinf", "9"),
+    "code": ("ID raqam", "0017"),
+    "olympiad": ("Olimpiada nomi", ""),
+    "round": ("Tur", "1-tur"),
+    "date": ("Bugungi sana", ""),
 }
-PLACEHOLDERS = {
-    "{full_name}": "Familiya Ism",
-    "{first_name}": "Ism",
-    "{last_name}": "Familiya",
-    "{school}": "Maktab",
-    "{grade}": "Sinf",
-    "{subject}": "Fan yoki blok nomi",
-    "{place}": "O'rin (raqam)",
-    "{score}": "Ball",
-    "{max_score}": "Maksimal ball",
-    "{percent}": "Foiz",
-    "{round}": "Tur nomi",
-    "{code}": "Ishtirokchi ID",
-    "{olympiad}": "Olimpiada nomi",
-    "{date}": "Sana",
+CERT_PH: dict[str, tuple[str, str]] = {
+    **COMMON_PH,
+    "subject": ("Fan yoki blok", "Matematika"),
+    "place": ("O'rin (raqam)", "1"),
+    "place_roman": ("O'rin (rim raqami)", "I"),
+    "place_text": ("O'rin («1-o'rin»)", "1-o'rin"),
+    "award": ("Mukofot («1-o'rin g'olibi» / «faol ishtirokchisi»)", "1-o'rin g'olibi"),
+    "score": ("Ball", "57"),
+    "max_score": ("Maksimal ball", "60"),
+    "percent": ("Foiz", "95"),
 }
-DEFAULT_FIELDS = [
-    {"text": "SERTIFIKAT", "x": 50, "y": 22, "size": 6.5, "color": "#7a5c1e", "align": "center",
-     "font": "serif-bold", "max_width": 80},
-    {"text": "{olympiad}", "x": 50, "y": 33, "size": 2.4, "color": "#374151", "align": "center",
-     "font": "sans", "max_width": 80},
-    {"text": "{full_name}", "x": 50, "y": 47, "size": 4.6, "color": "#111827", "align": "center",
-     "font": "serif-bold", "max_width": 80},
-    {"text": "{school}, {grade}-sinf", "x": 50, "y": 56, "size": 2.0, "color": "#374151",
-     "align": "center", "font": "sans", "max_width": 80},
-    {"text": "{subject} fanidan {place}-o'rin", "x": 50, "y": 64, "size": 2.8, "color": "#7a5c1e",
-     "align": "center", "font": "serif-bold", "max_width": 80},
-    {"text": "Ball: {score} / {max_score} ({percent}%)", "x": 50, "y": 71, "size": 2.0,
-     "color": "#374151", "align": "center", "font": "sans", "max_width": 80},
-    {"text": "{date}", "x": 18, "y": 86, "size": 1.6, "color": "#4b5563", "align": "left",
-     "font": "sans", "max_width": 30},
-    {"text": "ID: {code}", "x": 82, "y": 86, "size": 1.6, "color": "#4b5563", "align": "right",
-     "font": "sans", "max_width": 30},
-]
+PASS_PH: dict[str, tuple[str, str]] = {
+    **COMMON_PH,
+    "subjects": ("Fanlar", "Matematika, Fizika"),
+    "exam_date": ("Olimpiada sanasi", "15-noyabr 2026"),
+    "weekday": ("Hafta kuni", "shanba"),
+    "arrive_time": ("Kelish vaqti", "08:30"),
+    "start_time": ("Boshlanish vaqti", "09:00"),
+    "end_time": ("Tugash vaqti", "11:00"),
+    "duration": ("Davomiyligi", "120 daqiqa"),
+    "session": ("Smena", "1-smena"),
+    "building": ("Bino", "Haziniy maktabi"),
+    "address": ("Manzil", "Uchko'prik tumani, Oltin vodiy MFY"),
+    "room": ("Xona", "204-xona"),
+    "floor": ("Qavat", "2"),
+    "row": ("Qator", "3"),
+    "desk": ("Parta", "2"),
+    "seat_side": ("Partadagi o'rni (chap/o'ng)", "chap"),
+    "seat_no": ("O'rin raqami (xonada)", "14"),
+    "seat_text": ("O'rin to'liq («14-o'rin · 3-qator, 2-parta, chap»)", "14-o'rin · 3-qator, 2-parta, chap"),
+}
+
+ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII", 9: "IX", 10: "X"}
+
+RULES = {
+    "all": "Natijasi bor barcha ishtirokchilar",
+    "winners": "Sovrindorlar (mukofot qoidasi bo'yicha)",
+    "place": "Faqat N-o'rin sovrindorlari",
+    "participants": "Sovrindor bo'lmaganlar (ishtirokchi sertifikati)",
+    "top": "1–N o'rin (foiz shartisiz)",
+    "percent": "Foiz bo'yicha",
+}
+
+AWARD_TEXT_DEFAULTS = {
+    "award_text_1": "1-o'rin g'olibi",
+    "award_text_2": "2-o'rin sovrindori",
+    "award_text_3": "3-o'rin sovrindori",
+    "award_text_n": "{place}-o'rin sovrindori",
+    "award_text_none": "faol ishtirokchisi",
+}
 
 
-@lru_cache(maxsize=64)
-def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(str(FONT_DIR / FONTS.get(name, FONTS["sans"])), max(size, 6))
+def sample_context(kind: str = "certificate") -> dict:
+    ph = PASS_PH if kind == "pass" else CERT_PH
+    ctx = {k: v[1] for k, v in ph.items()}
+    ctx["olympiad"] = st.get("olympiad_name")
+    ctx["date"] = datetime.now(config.TZ).strftime("%d.%m.%Y")
+    return ctx
 
 
-def default_background_path() -> Path:
-    """Fon yuklanmagan shablonlar uchun chiroyli standart fon (bir marta yaratiladi)."""
-    path = config.UPLOAD_DIR / "certificates" / "default_bg.png"
-    if path.exists():
-        return path
-    w, h = 1754, 1240  # A4 albom, 150 dpi
-    img = Image.new("RGB", (w, h), "#fffdf6")
-    d = ImageDraw.Draw(img)
-    gold, dark = "#b08d3c", "#7a5c1e"
-    d.rectangle([30, 30, w - 31, h - 31], outline=dark, width=10)
-    d.rectangle([55, 55, w - 56, h - 56], outline=gold, width=3)
-    d.rectangle([70, 70, w - 71, h - 71], outline=gold, width=1)
-    # Burchak bezaklari
-    for cx, cy in ((70, 70), (w - 71, 70), (70, h - 71), (w - 71, h - 71)):
-        for r in (40, 28, 16):
-            d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=gold, width=2)
-    # Yuqori va pastki chiziq bezagi
-    d.line([w * 0.3, 360, w * 0.7, 360], fill=gold, width=3)
-    d.line([w * 0.35, h - 230, w * 0.65, h - 230], fill=gold, width=2)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(path, optimize=True)
-    return path
+# ---------------------------------------------------------------------------
+# Mukofot (o'rin) qoidalari
+# ---------------------------------------------------------------------------
+def award_rules() -> dict:
+    """{"default": {"places": 3, "min_percent": 0}, "s:<fan_id>": {...}, "b:<blok_id>": {...}}"""
+    try:
+        data = json.loads(st.raw("award_rules") or "{}")
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("default", {"places": 3, "min_percent": 0})
+    return data
 
 
+def rule_for(scope_key: str) -> tuple[int, float]:
+    """(sovrinli o'rinlar soni, minimal foiz) — fan/blok uchun alohida yoki umumiy."""
+    rules = award_rules()
+    r = rules.get(scope_key) or rules["default"]
+    try:
+        return max(0, int(r.get("places", 3))), max(0.0, float(r.get("min_percent", 0)))
+    except (TypeError, ValueError):
+        return 3, 0.0
+
+
+def prize_place(row: ranking.RankRow, scope_key: str) -> Optional[int]:
+    """Sovrinli o'rin (1, 2, 3 ...) yoki None — sovrindor emas."""
+    places, min_pct = rule_for(scope_key)
+    if row.place <= places and row.percent + 1e-9 >= min_pct and row.score > 0:
+        return row.place
+    return None
+
+
+def award_text(prize: Optional[int], lang: str) -> str:
+    if prize is None:
+        key = "award_text_none"
+    elif prize in (1, 2, 3):
+        key = f"award_text_{prize}"
+    else:
+        key = "award_text_n"
+    text = (st.raw(key) or AWARD_TEXT_DEFAULTS[key]).replace("{place}", str(prize or ""))
+    return lat2cyr(text) if lang == "cyr" else text
+
+
+def place_text(place: int, lang: str) -> str:
+    return f"{place}-ўрин" if lang == "cyr" else f"{place}-o'rin"
+
+
+def rule_matches(tpl: CertificateTemplate, row: ranking.RankRow, prize: Optional[int]) -> bool:
+    """Shablon shu ishtirokchiga (shu fan/blok bo'yicha) beriladimi."""
+    rule = tpl.rule
+    if rule == "winners":
+        return prize is not None
+    if rule == "place":
+        return prize is not None and prize == max(1, tpl.top_n)
+    if rule == "participants":
+        return prize is None
+    if rule == "top":
+        return row.place <= max(1, tpl.top_n)
+    if rule == "percent":
+        return row.percent + 1e-9 >= tpl.min_percent
+    return True  # all
+
+
+# ---------------------------------------------------------------------------
+# Dizayn
+# ---------------------------------------------------------------------------
 def load_fields(tpl: CertificateTemplate) -> list[dict]:
+    """Eski (1-versiya) maydonlar — faqat yangi dizaynga o'girish uchun."""
     try:
         data = json.loads(tpl.fields_json or "[]")
         return data if isinstance(data, list) else []
@@ -106,86 +176,49 @@ def load_fields(tpl: CertificateTemplate) -> list[dict]:
         return []
 
 
-class _Safe(dict):
-    def __missing__(self, key):  # noma'lum {placeholder} o'zgarishsiz qoladi
-        return "{" + key + "}"
-
-
-def render(tpl: CertificateTemplate, ctx: dict) -> Image.Image:
-    """Shablon va ma'lumotlardan rasm yaratadi."""
-    bg_path = Path(tpl.background_path) if tpl.background_path else None
-    if not bg_path or not bg_path.exists():
-        bg_path = default_background_path()
-    img = Image.open(bg_path).convert("RGB")
-    W, H = img.size
-    d = ImageDraw.Draw(img)
-    for f in load_fields(tpl):
+def load_design(tpl: CertificateTemplate) -> dict:
+    """Shablon dizayni (tekshirilgan). Eski shablon bo'lsa — o'girib beradi (saqlamaydi)."""
+    if tpl.design_json:
         try:
-            text = str(f.get("text", "")).format_map(_Safe(ctx))
-        except (ValueError, IndexError):
-            text = str(f.get("text", ""))  # noto'g'ri qavslar bo'lsa matn o'zi chiqadi
-        if not text.strip():
-            continue
-        size = max(6, int(float(f.get("size", 3)) * W / 100))
-        font_name = f.get("font", "sans")
-        font = _font(font_name, size)
-        max_w = float(f.get("max_width", 0) or 0) * W / 100
-        # Matn sig'masa shriftni kichraytiramiz
-        if max_w > 0:
-            while size > 8 and d.textlength(text, font=font) > max_w:
-                size = int(size * 0.94)
-                font = _font(font_name, size)
-        x = float(f.get("x", 50)) * W / 100
-        y = float(f.get("y", 50)) * H / 100
-        anchor = {"left": "lm", "right": "rm"}.get(f.get("align"), "mm")
-        d.text((x, y), text, font=font, fill=f.get("color", "#000000"), anchor=anchor)
-    return img
+            return dz.clean_design(json.loads(tpl.design_json))
+        except (ValueError, TypeError):
+            pass
+    if tpl.kind == "pass":
+        return presets.build("pass_default")
+    return dz.from_legacy(load_fields(tpl), tpl.background_path, tpl.width or 1754, tpl.height or 1240)
 
 
-def to_pdf(img: Image.Image) -> bytes:
-    buf = BytesIO()
-    img.save(buf, "PDF", resolution=150.0)
-    return buf.getvalue()
+def save_design(tpl: CertificateTemplate, design: dict) -> None:
+    design = dz.clean_design(design)
+    tpl.design_json = json.dumps(design, ensure_ascii=False, separators=(",", ":"))
+    tpl.width, tpl.height = design["page"]["w"], design["page"]["h"]
 
 
-def to_png(img: Image.Image, max_width: int = 1200) -> bytes:
-    if img.width > max_width:
-        img = img.resize((max_width, int(img.height * max_width / img.width)))
-    buf = BytesIO()
-    img.save(buf, "PNG", optimize=True)
-    return buf.getvalue()
+def render_template(tpl: CertificateTemplate, ctx: dict) -> Image.Image:
+    return dz.render(load_design(tpl), ctx)
 
 
-def sample_context() -> dict:
-    return {
-        "full_name": "Aliyev Aziz", "first_name": "Aziz", "last_name": "Aliyev",
-        "school": "5-maktab", "grade": "9", "subject": "Matematika", "place": "1",
-        "score": "57", "max_score": "60", "percent": "95", "round": "1-tur",
-        "code": "0017", "olympiad": st.get("olympiad_name"),
-        "date": datetime.now(config.TZ).strftime("%d.%m.%Y"),
-    }
+def template_dpi(tpl: CertificateTemplate) -> int:
+    return load_design(tpl)["page"].get("dpi", 150)
 
 
-def build_context(p: Participant, title: str, row: ranking.RankRow, round_: Round) -> dict:
+# ---------------------------------------------------------------------------
+# Ishtirokchining sertifikatlari
+# ---------------------------------------------------------------------------
+def build_context(p: Participant, title: str, row: ranking.RankRow, round_: Round,
+                  prize: Optional[int]) -> dict:
     lang = p.lang
     return {
         "full_name": p.full_name, "first_name": p.first_name, "last_name": p.last_name,
         "school": by_lang(p.school.name, p.school.name_cyr, lang) if p.school else "",
         "grade": by_lang(p.grade.name, p.grade.name_cyr, lang) if p.grade else "",
-        "subject": title, "place": str(row.place), "score": fmt_num(row.score),
-        "max_score": fmt_num(row.max_score), "percent": fmt_num(row.percent),
+        "subject": title, "place": str(row.place), "place_roman": ROMAN.get(row.place, str(row.place)),
+        "place_text": place_text(row.place, lang), "award": award_text(prize, lang),
+        "score": fmt_num(row.score), "max_score": fmt_num(row.max_score), "percent": fmt_num(row.percent),
         "round": by_lang(round_.name, round_.name_cyr, lang), "code": p.code or "",
         "olympiad": st.get("olympiad_name"),
         "date": datetime.now(config.TZ).strftime("%d.%m.%Y"),
     }
-
-
-def eligible(tpl: CertificateTemplate, row: ranking.RankRow) -> bool:
-    if tpl.rule == "top":
-        return row.place <= max(1, tpl.top_n)
-    if tpl.rule == "percent":
-        return row.percent >= tpl.min_percent
-    return True
 
 
 @dataclass
@@ -193,20 +226,32 @@ class CertItem:
     template: CertificateTemplate
     title: str
     context: dict
+    place: int = 0
+    prize: Optional[int] = None
 
     @property
     def filename(self) -> str:
         safe = "".join(c if c.isalnum() else "_" for c in self.title)[:40]
         return f"{self.context.get('code', '')}_{safe}_{self.template.id}.pdf"
 
+    def render(self) -> Image.Image:
+        return render_template(self.template, self.context)
 
-async def certificates_for(session: AsyncSession, p: Participant) -> list[CertItem]:
-    """Ishtirokchiga tegishli barcha sertifikatlar (faol shablonlar bo'yicha)."""
+
+async def active_templates(session: AsyncSession) -> list[CertificateTemplate]:
+    return (await session.execute(
+        select(CertificateTemplate).where(CertificateTemplate.is_active == True,  # noqa: E712
+                                          CertificateTemplate.kind == "certificate")
+        .order_by(CertificateTemplate.position, CertificateTemplate.id))).scalars().all()
+
+
+async def certificates_for(session: AsyncSession, p: Participant,
+                           templates: Optional[list[CertificateTemplate]] = None) -> list[CertItem]:
+    """Ishtirokchiga tegishli barcha sertifikatlar (faol shablonlar va mukofot qoidalari bo'yicha)."""
     if p.status != "active":
         return []
-    templates = (await session.execute(
-        select(CertificateTemplate).where(CertificateTemplate.is_active == True)
-        .order_by(CertificateTemplate.position, CertificateTemplate.id))).scalars().all()
+    if templates is None:
+        templates = await active_templates(session)
     if not templates:
         return []
     by_grade = st.get("ranking_by_grade")
@@ -219,44 +264,49 @@ async def certificates_for(session: AsyncSession, p: Participant) -> list[CertIt
             continue
         if tpl.scope == "block":
             blocks = [await session.get(Block, tpl.block_id)] if tpl.block_id else \
-                (await session.execute(select(Block).where(Block.is_active == True))).scalars().all()
+                (await session.execute(select(Block).where(Block.is_active == True))).scalars().all()  # noqa: E712
             for b in blocks:
                 if b is None or not set(my_subjects) & {s.id for s in b.subjects}:
                     continue
                 rows = await ranking.block_ranking(session, b, round_, by_grade=by_grade)
                 row = next((r for r in rows if r.participant.id == p.id), None)
-                if row and eligible(tpl, row):
+                if row is None:
+                    continue
+                prize = prize_place(row, f"b:{b.id}")
+                if rule_matches(tpl, row, prize):
                     title = by_lang(b.name, b.name_cyr, p.lang)
-                    items.append(CertItem(tpl, title, build_context(p, title, row, round_)))
+                    items.append(CertItem(tpl, title, build_context(p, title, row, round_, prize), row.place, prize))
         else:
             subjects = [my_subjects[tpl.subject_id]] if tpl.subject_id in my_subjects else \
                 ([] if tpl.subject_id else list(my_subjects.values()))
             for s in subjects:
                 rows = await ranking.subject_ranking(session, s, round_, by_grade=by_grade)
                 row = next((r for r in rows if r.participant.id == p.id), None)
-                if row and eligible(tpl, row):
+                if row is None:
+                    continue
+                prize = prize_place(row, f"s:{s.id}")
+                if rule_matches(tpl, row, prize):
                     title = by_lang(s.name, s.name_cyr, p.lang)
-                    items.append(CertItem(tpl, title, build_context(p, title, row, round_)))
+                    items.append(CertItem(tpl, title, build_context(p, title, row, round_, prize), row.place, prize))
     return items
 
 
-def save_background(data: bytes, tpl_id: int) -> tuple[str, int, int]:
-    """Yuklangan fon rasmini tekshirib saqlaydi. (yo'l, kenglik, balandlik)"""
-    img = Image.open(BytesIO(data))
-    img.load()
-    img = img.convert("RGB")
-    # Juda katta rasmlarni kichraytiramiz (A4 300 dpi chegarasi)
-    if max(img.size) > 3508:
-        k = 3508 / max(img.size)
-        img = img.resize((int(img.width * k), int(img.height * k)))
-    path = config.UPLOAD_DIR / "certificates" / f"bg_{tpl_id}_{int(datetime.now().timestamp())}.png"
-    img.save(path, optimize=True)
-    return str(path), img.width, img.height
+def caption_for(item: CertItem, lang: str) -> str:
+    """Botdagi izoh: sovrindorga tabrik bilan, qolganlarga oddiy."""
+    from ..bot.texts import t
+    if item.prize is not None:
+        return t("cert_caption_place", lang).format(title=item.title, place=item.prize)
+    return t("cert_caption", lang).format(title=item.title)
 
 
-def image_size(path: Optional[str]) -> tuple[int, int]:
-    p = Path(path) if path else None
-    if not p or not p.exists():
-        p = default_background_path()
-    with Image.open(p) as im:
-        return im.size
+def new_template(kind: str, preset: str, name: str = "") -> CertificateTemplate:
+    """Tayyor shablondan yangi shablon (bazaga qo'shilmagan)."""
+    plist = presets.PASS_PRESETS if kind == "pass" else presets.CERT_PRESETS
+    if preset not in plist:
+        preset = next(iter(plist))
+    tpl = CertificateTemplate(name=name or plist[preset][0], kind=kind, is_active=False,
+                              rule="all", scope="subject", top_n=3)
+    if kind == "certificate" and preset.startswith("diploma_"):
+        tpl.rule, tpl.top_n = "place", int(preset[-1])
+    save_design(tpl, presets.build(preset))
+    return tpl

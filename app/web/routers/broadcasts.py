@@ -24,7 +24,7 @@ from ..core import (Page, client_ip, flash, int_or_none, render,
 router = APIRouter(prefix="/admin/broadcasts", dependencies=[Depends(verify_csrf)])
 
 FILTER_KEYS = ("school_id", "grade_id", "subject_id", "lang", "status", "attendance")
-KINDS = {"message": "Xabar", "results": "Natijalar", "certificates": "Sertifikatlar"}
+KINDS = {"message": "Xabar", "results": "Natijalar", "certificates": "Sertifikatlar", "passes": "Ruxsatnomalar", "sheets": "Tekshirilgan titullar"}
 
 
 def _filters(form) -> dict:

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import config
-from ..models import Attendance, Participant, participant_subjects
+from ..models import Attendance, ExamSession, Participant, SeatAssignment, participant_subjects
 from ..utils import search_norm
 
 
@@ -38,6 +38,14 @@ class ParticipantFilter:
     date_to: str = ""
     attendance: str = ""  # came | absent | unmarked — davomat bo'yicha
     att_round: Optional[int] = None  # davomat qaysi turga tegishli (bo'sh — joriy tur)
+    # Joylashtirish bo'yicha (seat_round — qaysi tur; bo'sh bo'lsa att_round yoki joriy tur)
+    session_id: Optional[int] = None
+    room_id: Optional[int] = None
+    exam_day: str = ""        # YYYY-MM-DD — shu kuni yozadiganlar
+    pass_unsent: str = ""     # "1" — ruxsatnomasi hali yuborilmaganlar
+    seated: str = ""          # yes | no — o'rin biriktirilgan / biriktirilmagan
+    seat_round: Optional[int] = None
+    ids: str = ""             # «1,5,9» — tanlangan o'quvchilar (ommaviy yuborish uchun)
 
     @classmethod
     def from_params(cls, params) -> "ParticipantFilter":
@@ -54,6 +62,12 @@ class ParticipantFilter:
             date_to=(params.get("date_to") or "").strip(),
             attendance=(params.get("attendance") or "").strip(),
             att_round=as_int("att_round"),
+            session_id=as_int("session_id"), room_id=as_int("room_id"),
+            exam_day=(params.get("exam_day") or "").strip(),
+            pass_unsent=(params.get("pass_unsent") or "").strip(),
+            seated=(params.get("seated") or "").strip(),
+            seat_round=as_int("seat_round"),
+            ids=(params.get("ids") or "").strip(),
         )
 
     def as_dict(self) -> dict:
@@ -90,6 +104,29 @@ def apply_filter(q, f: ParticipantFilter):
             q = q.where(Participant.id.in_(marked.where(Attendance.present == False)))  # noqa: E712
         else:
             q = q.where(Participant.id.not_in(marked))
+    seat_round = f.seat_round or f.att_round
+    if seat_round and (f.session_id or f.room_id or f.exam_day or f.pass_unsent or f.seated in ("yes", "no")):
+        sub = select(SeatAssignment.participant_id).where(SeatAssignment.round_id == seat_round)
+        if f.seated == "no":
+            q = q.where(Participant.id.not_in(sub))
+        else:
+            if f.session_id:
+                sub = sub.where(SeatAssignment.session_id == f.session_id)
+            if f.room_id:
+                sub = sub.where(SeatAssignment.room_id == f.room_id)
+            if f.exam_day:
+                try:
+                    day = datetime.strptime(f.exam_day, "%Y-%m-%d").date()
+                    sub = sub.where(SeatAssignment.session_id.in_(
+                        select(ExamSession.id).where(ExamSession.day == day)))
+                except ValueError:
+                    pass
+            if f.pass_unsent == "1":
+                sub = sub.where(SeatAssignment.pass_sent_at.is_(None))
+            q = q.where(Participant.id.in_(sub))
+    if f.ids:
+        id_list = [int(x) for x in f.ids.split(",") if x.strip().isdigit()][:5000]
+        q = q.where(Participant.id.in_(id_list or [-1]))
     if f.status:
         q = q.where(Participant.status == f.status)
     if f.lang:
@@ -119,7 +156,7 @@ async def by_telegram(session: AsyncSession, telegram_id: int) -> Optional[Parti
 
 async def resolve_att_round(session: AsyncSession, f: ParticipantFilter) -> None:
     """Davomat filtri berilgan, lekin tur ko'rsatilmagan bo'lsa — joriy turni qo'yadi."""
-    if f.attendance and not f.att_round:
+    if (f.attendance or f.session_id or f.room_id or f.seated) and not f.att_round and not f.seat_round:
         from .ranking import current_round
         cur = await current_round(session)
         f.att_round = cur.id if cur else None

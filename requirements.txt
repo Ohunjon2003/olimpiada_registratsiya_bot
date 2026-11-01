@@ -13,3 +13,5 @@ openpyxl>=3.1
 pillow>=10.3
 python-dotenv>=1.0
 tzdata>=2024.1  # Windows'da vaqt mintaqalari bazasi yo'q, shu kerak
+fonttools>=4.40  # shrift o'lchamlari (dizayner: ekran va PDF bir xil bo'lishi uchun)
+opencv-python-headless>=4.8  # titulni skaner qilish (markerlar, QR, doirachalar)

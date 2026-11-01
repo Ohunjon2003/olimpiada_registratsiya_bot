@@ -11,6 +11,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from ...db import session_scope
 from ...services import certificates as certs
+from ...services import design as dz
 from ...services import participants as psvc
 from ...services import settings as st
 from .. import keyboards as kb
@@ -143,13 +144,41 @@ async def my_certificates(msg: Message, state: FSMContext) -> None:
     wait = await msg.answer(t("cert_preparing", lang))
     for item in items[:10]:
         # Rasm chizish CPU ishi — botni to'xtatmaslik uchun alohida oqimda
-        pdf = await asyncio.to_thread(lambda it=item: certs.to_pdf(certs.render(it.template, it.context)))
-        await msg.answer_document(BufferedInputFile(pdf, filename=item.filename),
-                                  caption=t("cert_caption", lang).format(title=item.title))
+        img = await asyncio.to_thread(item.render)
+        jpg = await asyncio.to_thread(dz.to_jpeg, img)
+        pdf = await asyncio.to_thread(dz.to_pdf, img, certs.template_dpi(item.template))
+        await msg.answer_photo(BufferedInputFile(jpg, filename=item.filename.replace(".pdf", ".jpg")),
+                               caption=certs.caption_for(item, lang))
+        await msg.answer_document(BufferedInputFile(pdf, filename=item.filename))
     try:
         await wait.delete()
     except Exception:
         pass
+
+
+@tail.message(StateFilter(None), Btn("btn_pass"))
+async def my_pass(msg: Message, state: FSMContext) -> None:
+    """Ruxsatnoma: olimpiada kuni qayerda va qachon."""
+    from ...services import seating
+    async with session_scope() as s:
+        p = await psvc.by_telegram(s, msg.from_user.id)
+        if p is None:
+            await cmd_start(msg, state)
+            return
+        lang = p.lang
+        if p.status != "active":
+            await msg.answer(t("disqualified", lang))
+            return
+        if not st.get("passes_published"):
+            await msg.answer(t("pass_not_ready", lang))
+            return
+        if await seating.current_assignment(s, p) is None:
+            await msg.answer(t("pass_none", lang))
+            return
+        result = await seating.send_pass(msg.bot, s, p)
+        await s.commit()
+    if result not in ("ok", "blocked"):
+        await msg.answer(t("error", lang))
 
 
 @tail.message(StateFilter(None), Btn("btn_lang"))

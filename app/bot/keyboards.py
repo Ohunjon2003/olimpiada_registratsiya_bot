@@ -45,6 +45,8 @@ def menu_kb(lang: str, can_edit: bool = False) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=t("btn_cert", lang)), KeyboardButton(text=t("btn_lang", lang))],
     ]
     extra = []
+    if st.get("passes_published"):
+        extra.append(KeyboardButton(text=t("btn_pass", lang)))
     if can_edit:
         extra.append(KeyboardButton(text=t("btn_edit_profile", lang)))
     if appeals_open():

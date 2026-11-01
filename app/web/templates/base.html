@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ setting('olympiad_name') }}{% endblock %} — boshqaruv</title>
-  <link rel="stylesheet" href="/static/app.css?v=5">
+  <link rel="stylesheet" href="/static/app.css?v=9">
   <script src="/static/vendor/htmx.min.js"></script>
   {% block head %}{% endblock %}
 </head>
@@ -25,7 +25,11 @@
         {{ nav('/judge/enter', '✍️', 'Ball kiritish') }}
         {{ nav('/admin/ranking', '🏅', 'Reyting') }}
         {{ nav('/admin/broadcasts', '📣', 'Xabar yuborish') }}
+        {{ nav('/admin/seating', '🪑', 'Joylashtirish') }}
+        {{ nav('/admin/omr', '📝', 'Titul va skaner') }}
+        {{ nav('/scan', '📷', 'Skaner') }}
         {{ nav('/admin/certificates', '🎓', 'Sertifikatlar') }}
+        {{ nav('/admin/awards', '🏅', "O'rinlar va mukofotlar") }}
         {{ nav('/admin/appeals', '⚖️', "E'tirozlar") }}
         <div class="nav-title">Sozlash</div>
         {{ nav('/admin/settings', '⚙️', 'Umumiy sozlamalar') }}
@@ -48,6 +52,7 @@
         {{ nav('/judge', '🏠', 'Bosh sahifa', True) }}
         {% if setting('judges_attendance') %}{{ nav('/attendance', '🙋', 'Davomat') }}{% endif %}
         {{ nav('/judge/enter', '✍️', 'Ball kiritish') }}
+        {{ nav('/scan', '📷', 'Skaner') }}
       {% endif %}
       <div class="nav-title">Hisob</div>
       {{ nav('/account', '🔑', 'Parolni almashtirish') }}

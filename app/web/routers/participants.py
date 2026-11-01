@@ -18,6 +18,8 @@ from ...models import (CustomQuestion, FsmRecord, Grade, Participant, Result,
                        Round, School, Subject, User)
 from ...services import audit, ranking
 from ...services import certificates as certs
+from ...services import design as dz
+from ...services import seating
 from ...services import export
 from ...services import attendance as att_svc
 from ...services.participants import (ParticipantFilter, apply_filter,
@@ -101,9 +103,14 @@ async def detail(pid: int, request: Request, user: User = Depends(require_admin)
                                      .order_by(Round.position, Subject.position))).all()
     schools, grades, subjects = await _lookups(session)
     cert_items = await certs.certificates_for(session, p)
+    seat = await seating.current_assignment(session, p)
+    from ...models import SheetScan
+    scans = (await session.execute(select(SheetScan).where(
+        (SheetScan.participant_id == pid) | (SheetScan.qr_participant_id == pid)).order_by(SheetScan.id.desc()))).scalars().all()
     return render(request, "admin/participant.html", {
         "p": p, "results": results, "schools": schools, "grades": grades, "subjects": subjects,
-        "cert_items": cert_items, "errors": []})
+        "cert_items": cert_items, "errors": [], "seat": seat, "scans": scans,
+        "seat_text": seating.seat_text(seat.room, seat) if seat else ""})
 
 
 @router.post("/{pid}/save")
@@ -228,6 +235,6 @@ async def certificate(pid: int, index: int, user: User = Depends(require_admin),
     if not 0 <= index < len(items):
         raise HTTPException(404)
     it = items[index]
-    pdf = await asyncio.to_thread(lambda: certs.to_pdf(certs.render(it.template, it.context)))
+    pdf = await asyncio.to_thread(lambda: dz.to_pdf(it.render(), certs.template_dpi(it.template)))
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{it.filename}"'})

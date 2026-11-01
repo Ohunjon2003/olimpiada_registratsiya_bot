@@ -1,0 +1,10 @@
+Shriftlar litsenziyasi / Font licenses
+
+DejaVu Sans, DejaVu Serif — Bitstream Vera / DejaVu licence (erkin tarqatish mumkin).
+Montserrat, Raleway, Open Sans, Nunito, Oswald, Lora, PT Serif, EB Garamond,
+Cormorant Garamond, Forum, Pacifico, Bad Script, Caveat — SIL Open Font License 1.1
+(https://openfontlicense.org). Manba: Google Fonts (github.com/google/fonts).
+
+Fayllar faqat lotin va kirill harflari bilan qisqartirilgan (subset) va statik
+(Regular/Bold) ko'rinishga keltirilgan. Shriftlarni dasturiy ta'minot bilan birga
+tarqatish va ishlatish OFL bo'yicha ruxsat etilgan; shriftlarning o'zini sotish mumkin emas.

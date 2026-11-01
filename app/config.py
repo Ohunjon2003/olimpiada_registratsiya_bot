@@ -57,7 +57,8 @@ class Config:
         """Kerakli papkalarni yaratadi."""
         for d in (cls.DATA_DIR, cls.UPLOAD_DIR, cls.BACKUP_DIR,
                   cls.UPLOAD_DIR / "rules", cls.UPLOAD_DIR / "certificates",
-                  cls.UPLOAD_DIR / "broadcasts"):
+                  cls.UPLOAD_DIR / "broadcasts", cls.UPLOAD_DIR / "certificates" / "assets",
+                  cls.UPLOAD_DIR / "fonts", cls.DATA_DIR / "exports"):
             d.mkdir(parents=True, exist_ok=True)
 
     @property

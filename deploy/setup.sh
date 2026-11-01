@@ -53,7 +53,6 @@ for key, env in (("BOT_TOKEN", "TOKEN"), ("ADMIN_USERNAME", "AU"), ("ADMIN_PASSW
     text = re.sub(rf"^{key}=.*$", lambda m: f"{key}={val}", text, flags=re.M)
 open(path, "w").write(text)
 PY
-  if [[ -n "$DOMAIN" ]]; then sed -i "s/^COOKIE_SECURE=.*/COOKIE_SECURE=true/" "$APP_DIR/.env"; fi
 else
   echo "   .env mavjud — o'zgartirilmadi"
 fi
@@ -80,8 +79,17 @@ ufw --force enable >/dev/null
 
 if [[ -n "$DOMAIN" ]]; then
   echo "==> 8/8 SSL sertifikat (Let's Encrypt)"
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect || \
-    echo "⚠️  SSL olinmadi. Domen DNS'i server IP'siga yo'naltirilganini tekshirib, qayta: certbot --nginx -d $DOMAIN"
+  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
+    # HTTPS ishlayapti — sessiya cookie faqat HTTPS orqali yuborilsin (mavjud .env da ham)
+    if grep -q "^COOKIE_SECURE=" "$APP_DIR/.env"; then
+      sed -i "s/^COOKIE_SECURE=.*/COOKIE_SECURE=true/" "$APP_DIR/.env"
+    else
+      echo "COOKIE_SECURE=true" >> "$APP_DIR/.env"
+    fi
+    systemctl restart olimpiada
+  else
+    echo "⚠️  SSL olinmadi. Domen DNS'i server IP'siga yo'naltirilganini tekshirib, qayta: sudo bash deploy/setup.sh $DOMAIN"
+  fi
 else
   echo "==> 8/8 SSL o'tkazib yuborildi (domen berilmagan)"
 fi

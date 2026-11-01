@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Skaner{% endblock %}
+{% block crumbs %}Titul skaneri{% endblock %}
+{% block head %}<style>
+  .scan-wrap { max-width: 720px; margin: 0 auto; }
+  .cam { position: relative; background: #0f172a; border-radius: 12px; overflow: hidden; aspect-ratio: 3 / 4; }
+  .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cam .frame { position: absolute; inset: 7% 12%; border: 3px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none; }
+  .cam .hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: rgba(15,23,42,.65); color: #fff; font-size: 14px; text-align: center; }
+  .cam .off { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #cbd5e1; text-align: center; padding: 20px; }
+  .res { margin-top: 12px; border-radius: 12px; padding: 16px; font-size: 17px; font-weight: 600; line-height: 1.4; min-height: 64px; }
+  .res.ok { background: #dcfce7; color: #14532d; border: 2px solid #22c55e; }
+  .res.dup { background: #fef9c3; color: #713f12; border: 2px solid #eab308; }
+  .res.review { background: #ffedd5; color: #7c2d12; border: 2px solid #f97316; }
+  .res.unclear { background: #f3e8ff; color: #581c87; border: 2px solid #a855f7; }
+  .res.error { background: #fee2e2; color: #7f1d1d; border: 2px solid #ef4444; }
+  .res.idle { background: #f1f5f9; color: #475569; border: 2px dashed #cbd5e1; font-weight: 500; }
+  .scan-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .scan-btns .btn { flex: 1; justify-content: center; min-height: 46px; font-size: 15px; }
+  .hist { margin-top: 14px; font-size: 13px; }
+  .hist div { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .hist .t { color: var(--muted); margin-right: 6px; }
+  .cnt { display: flex; gap: 10px; margin: 10px 0; font-size: 13px; }
+  .cnt span { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; }
+</style>{% endblock %}
+{% block content %}
+<div class="scan-wrap">
+  <div class="page-head"><div><h1>📷 Titul skaneri</h1>
+    <div class="muted small">Titulni ramka ichiga to'liq joylang — tizim o'zi suratga oladi. Yashil — natija o'quvchiga yozildi.</div></div></div>
+  {% if not subjects %}<div class="alert warn">Sizga biriktirilgan fanlarda avtomatik tekshiruv yoqilmagan.</div>{% endif %}
+
+  <div class="cam" id="cam">
+    <video id="video" playsinline muted></video>
+    <div class="frame"></div>
+    <div class="hint" id="hint">Kamera ishga tushirilmoqda…</div>
+    <div class="off hidden" id="off"></div>
+  </div>
+
+  <div class="res idle" id="res">Natija shu yerda chiqadi</div>
+  <div class="scan-btns">
+    <button class="btn hidden" type="button" id="btn-force">📨 Admin tekshirsin</button>
+    <button class="btn" type="button" id="btn-again">🔁 Qayta skaner</button>
+    <label class="btn" id="btn-photo" style="position:relative;overflow:hidden">📸 Suratga olish<input type="file" accept="image/*" capture="environment" id="photo" style="position:absolute;inset:0;opacity:0"></label>
+    <button class="btn hidden" type="button" id="btn-torch">🔦 Chiroq</button>
+  </div>
+  <div class="cnt"><span>✅ <b id="c-ok">0</b></span><span>⚠️ <b id="c-warn">0</b></span><span>❌ <b id="c-err">0</b></span><span class="muted">Jami (siz): <b id="c-all">{{ my_count }}</b></span></div>
+  <div class="hist card" id="hist"><div class="muted">Bu sessiyada hali skaner qilinmadi</div></div>
+  <p class="muted small mt">Fanlar: {% for s in subjects %}{{ s.name }}{{ ', ' if not loop.last }}{% else %}—{% endfor %}</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  var CSRF = {{ csrf|tojson }};
+  var video = document.getElementById('video'), hint = document.getElementById('hint'), res = document.getElementById('res');
+  var off = document.getElementById('off'), hist = document.getElementById('hist');
+  var canvas = document.createElement('canvas');
+  var busy = false, paused = false, lastToken = '', sheetGone = true, lastBlob = null, track = null, torchOn = false;
+  var counts = {ok: 0, warn: 0, err: 0}, total = {{ my_count }};
+  var COLORS = {ok: 'ok', dup: 'dup', review: 'review', unclear: 'unclear', error: 'error'};
+
+  function beep(ok) {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)(), o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = ok ? 880 : 300; o.connect(g); g.connect(ctx.destination); g.gain.value = 0.15;
+      o.start(); o.stop(ctx.currentTime + (ok ? 0.12 : 0.35));
+    } catch (e) {}
+    if (navigator.vibrate) navigator.vibrate(ok ? 80 : [120, 60, 120]);
+  }
+  function show(j) {
+    res.className = 'res ' + (COLORS[j.state] || 'idle');
+    res.textContent = j.message || '';
+    document.getElementById('btn-force').classList.toggle('hidden', j.state !== 'unclear');
+    var row = document.createElement('div');
+    row.innerHTML = '<span class="t">' + new Date().toLocaleTimeString().slice(0, 8) + '</span>';
+    row.appendChild(document.createTextNode(j.message || ''));
+    if (hist.firstElementChild && hist.firstElementChild.classList.contains('muted')) hist.innerHTML = '';
+    hist.insertBefore(row, hist.firstChild);
+    while (hist.children.length > 15) hist.removeChild(hist.lastChild);
+    if (j.state === 'ok') { counts.ok++; total++; } else if (j.state === 'error') counts.err++; else counts.warn++;
+    document.getElementById('c-ok').textContent = counts.ok;
+    document.getElementById('c-warn').textContent = counts.warn;
+    document.getElementById('c-err').textContent = counts.err;
+    document.getElementById('c-all').textContent = total;
+    beep(j.state === 'ok');
+  }
+  function send(blob, force, fromPhoto) {
+    busy = true;
+    var fd = new FormData(); fd.append('image', blob, 'titul.jpg'); fd.append('csrf', CSRF);
+    if (force) fd.append('force', '1');
+    return fetch('/scan/frame', {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-CSRF-Token': CSRF}})
+      .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('login'); } return r.json(); })
+      .then(function (j) {
+        if (j.state === 'busy') return;
+        if (j.state === 'nosheet') { sheetGone = true; if (fromPhoto) show({state: 'error', message: '❌ Rasmda titul topilmadi'}); else hint.textContent = 'Titulni ramka ichiga to\'liq joylang'; return; }
+        if (j.state === 'partial') { if (fromPhoto) show({state: 'error', message: '❌ ' + j.message}); else hint.textContent = j.message; return; }
+        // Natija: bir xil titul kadrda turibdi — qayta ko'rsatmaymiz (olib, qayta tutilsa — ko'rsatiladi)
+        if (!fromPhoto && !force && j.token && j.token === lastToken && !sheetGone) return;
+        lastToken = j.token || ''; sheetGone = false; lastBlob = blob;
+        show(j);
+        hint.textContent = j.state === 'ok' ? 'Keyingi titulni tuting' : 'Titulni olib, keyingisini tuting';
+        paused = true; setTimeout(function () { paused = false; }, 1300);
+      })
+      .catch(function (e) { if (e.message !== 'login') hint.textContent = 'Aloqa xatosi — internetni tekshiring'; })
+      .finally(function () { busy = false; });
+  }
+  function grab() {
+    if (busy || paused || !video.videoWidth || document.hidden) return;
+    var w = video.videoWidth, h = video.videoHeight, k = Math.min(1, 1920 / Math.max(w, h));
+    canvas.width = Math.round(w * k); canvas.height = Math.round(h * k);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(function (b) { if (b) send(b, false, false); }, 'image/jpeg', 0.85);
+  }
+  function startCamera() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || !window.isSecureContext) {
+      off.classList.remove('hidden'); video.classList.add('hidden'); hint.classList.add('hidden');
+      off.innerHTML = 'Jonli kamera faqat <b>&nbsp;HTTPS&nbsp;</b> (domen) orqali ishlaydi.<br><br>Hozircha pastdagi «📸 Suratga olish» tugmasidan foydalaning — har titulni bir marta suratga oling.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1920}, height: {ideal: 1080}}})
+      .then(function (stream) {
+        video.srcObject = stream; video.play();
+        track = stream.getVideoTracks()[0];
+        var caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) document.getElementById('btn-torch').classList.remove('hidden');
+        hint.textContent = 'Titulni ramka ichiga joylang';
+        setInterval(grab, 650);
+      })
+      .catch(function (e) {
+        off.classList.remove('hidden'); off.textContent = 'Kameraga ruxsat berilmadi (' + e.name + '). Brauzer sozlamasida ruxsat bering yoki «📸 Suratga olish»dan foydalaning.';
+      });
+  }
+  document.getElementById('btn-again').addEventListener('click', function () { lastToken = ''; sheetGone = true; res.className = 'res idle'; res.textContent = 'Titulni tuting'; });
+  document.getElementById('btn-force').addEventListener('click', function () { if (lastBlob) send(lastBlob, true, true); });
+  document.getElementById('btn-torch').addEventListener('click', function () {
+    if (!track) return; torchOn = !torchOn; track.applyConstraints({advanced: [{torch: torchOn}]}).catch(function () {});
+  });
+  document.getElementById('photo').addEventListener('change', function () {
+    var f = this.files[0]; if (!f) return;
+    res.className = 'res idle'; res.textContent = '⏳ Tekshirilmoqda…';
+    lastBlob = f; send(f, false, true); this.value = '';
+  });
+  startCamera();
+})();
+</script>
+{% endblock %}

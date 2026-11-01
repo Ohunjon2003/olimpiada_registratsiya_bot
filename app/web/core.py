@@ -27,6 +27,18 @@ templates.env.filters["dtinput"] = to_local_input
 templates.env.globals["setting"] = st.get
 
 
+def _setting_json(key: str):
+    """Erkin JSON sozlama (masalan, custom_fonts) — shablonlarda ro'yxat sifatida."""
+    import json
+    try:
+        return json.loads(st.raw(key) or "null") or []
+    except ValueError:
+        return []
+
+
+templates.env.globals["setting_json"] = _setting_json
+
+
 # ---------------------------------------------------------------------------
 # Autentifikatsiya
 # ---------------------------------------------------------------------------
@@ -107,7 +119,9 @@ async def verify_csrf(request: Request) -> None:
 # Flash xabarlar va render
 # ---------------------------------------------------------------------------
 def flash(request: Request, message: str, kind: str = "success") -> None:
-    request.session.setdefault("flash", []).append([kind, message])
+    # Ro'yxatni qayta tayinlaymiz: Starlette sessiya ichidagi ro'yxat o'zgarishini sezmaydi
+    # (aks holda oldingi o'qilmagan xabar bo'lsa, yangisi cookie'ga yozilmay yo'qoladi)
+    request.session["flash"] = list(request.session.get("flash", [])) + [[kind, message]]
 
 
 def pop_flashes(request: Request) -> list:

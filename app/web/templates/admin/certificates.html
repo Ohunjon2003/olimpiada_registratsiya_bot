@@ -2,29 +2,80 @@
 {% block title %}Sertifikatlar{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Sertifikat va diplomlar</h1><div class="muted">O'z dizayningizni yarating: fon rasmini yuklang va matnlarni sichqoncha bilan joylashtiring.</div></div>
-  <form method="post" action="/admin/certificates/new"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary">＋ Yangi shablon</button></form>
+  <div><h1>🎓 Sertifikat, diplom va ruxsatnomalar</h1>
+    <div class="muted">Canva'dagidek dizayn qiling: fon rangi yoki rasmi, matnlar, logo, muhr, shakllar. O'rinlar ballga qarab avtomatik aniqlanadi.</div></div>
+  <div class="btns">
+    <a class="btn" href="/admin/awards">🏅 O'rinlar va mukofotlar</a>
+    <a class="btn" href="/admin/certificates/review">📋 Kim nima oladi</a>
+    <a class="btn primary" href="/admin/certificates/new">＋ Yangi sertifikat</a>
+  </div>
 </div>
+
 <div class="card mb">
   <div class="btns">
     <form method="post" action="/admin/toggle/certificates_enabled" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
       {% if setting('certificates_enabled') %}<button class="btn ok">✅ Sertifikatlar yoqilgan — o'chirish</button>{% else %}<button class="btn">⛔️ Sertifikatlar o'chirilgan — yoqish</button>{% endif %}</form>
-    <span class="muted small">O'quvchi botdagi «🎓 Sertifikat» tugmasi orqali o'zinikini oladi. Shart: sertifikatlar yoqilgan va natijalar e'lon qilingan
-      ({{ 'ha' if setting('results_published') else 'hozir yo\'q' }}).</span>
+    <span class="muted small">O'quvchi botdagi «🎓 Sertifikat» tugmasi orqali o'zinikini oladi (rasm + PDF). Shart: sertifikatlar yoqilgan va natijalar e'lon qilingan
+      ({{ 'ha' if setting('results_published') else "hozir yo'q" }}). Hammaga birdan yuborish — «📣 Xabar yuborish» → «Sertifikatlar».</span>
   </div>
 </div>
-<div class="table-wrap"><table>
-  <thead><tr><th>Nomi</th><th>Kimga</th><th>Qaysi fan/blok</th><th>Tur</th><th>Holat</th><th></th></tr></thead>
-  <tbody>
-  {% for t in items %}
-  <tr class="{{ '' if t.is_active else 'inactive' }}">
-    <td><a href="/admin/certificates/{{ t.id }}"><b>{{ t.name }}</b></a></td>
-    <td>{% if t.rule == 'top' %}1–{{ t.top_n }} o'rin{% elif t.rule == 'percent' %}{{ t.min_percent|num }}% va undan yuqori{% else %}Barcha ishtirokchilar{% endif %}</td>
-    <td>{% if t.scope == 'block' %}🧩 {{ blocks[t.block_id].name if t.block_id in blocks else 'barcha bloklar' }}{% else %}{{ subjects[t.subject_id].name if t.subject_id in subjects else 'barcha fanlar' }}{% endif %}</td>
-    <td>{{ rounds[t.round_id].name if t.round_id in rounds else 'joriy tur' }}</td>
-    <td>{% if t.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge">nofaol</span>{% endif %}</td>
-    <td class="right nowrap"><a class="btn sm" href="/admin/certificates/{{ t.id }}">✏️ Dizayn</a> <a class="btn sm" href="/admin/certificates/{{ t.id }}/zip">⬇️ ZIP</a></td>
-  </tr>
-  {% else %}<tr><td colspan="6" class="empty">Shablonlar yo'q</td></tr>{% endfor %}
-  </tbody></table></div>
+
+<h2>Sertifikat va diplomlar</h2>
+<div class="tpl-grid mb">
+  {% for t in certs %}
+  <div class="tpl-card {{ '' if t.is_active else 'inactive' }}">
+    <a href="/admin/certificates/{{ t.id }}" class="tpl-thumb"><img loading="lazy" src="/admin/certificates/{{ t.id }}/preview.png?w=520&v={{ t.design_json|length }}{{ t.width }}" alt=""></a>
+    <div class="tpl-body">
+      <div class="tpl-title"><a href="/admin/certificates/{{ t.id }}"><b>{{ t.name }}</b></a>
+        {% if t.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge">nofaol</span>{% endif %}</div>
+      <div class="small muted">
+        👥 {% if t.rule in ('place', 'top') %}{{ rules[t.rule]|replace('N', t.top_n|string) }}{% elif t.rule == 'percent' %}{{ t.min_percent|num }}% va undan yuqori{% else %}{{ rules.get(t.rule, t.rule) }}{% endif %}<br>
+        📘 {% if t.scope == 'block' %}🧩 {{ blocks[t.block_id].name if t.block_id in blocks else 'barcha bloklar' }}{% else %}{{ subjects[t.subject_id].name if t.subject_id in subjects else 'barcha fanlar' }}{% endif %}
+        · {{ rounds[t.round_id].name if t.round_id in rounds else 'joriy tur' }}
+      </div>
+      <div class="btns mt-s">
+        <a class="btn sm primary" href="/admin/certificates/{{ t.id }}">✏️ Dizayn</a>
+        <form method="post" action="/admin/certificates/{{ t.id }}/duplicate" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">⧉ Nusxa</button></form>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card empty">Shablonlar yo'q. «＋ Yangi sertifikat» tugmasini bosing.</div>
+  {% endfor %}
+</div>
+
+<h2>🎫 Ruxsatnoma</h2>
+<p class="muted small">O'quvchiga olimpiadadan bir kun oldin yuboriladigan kirish varaqasi: sana, vaqt, bino, xona va o'rni. Faol bo'lgan birinchi shablon ishlatiladi. Yuborish — «🪑 Joylashtirish» sahifasida.</p>
+<div class="tpl-grid mb">
+  {% for t in passes %}
+  <div class="tpl-card {{ '' if t.is_active else 'inactive' }}">
+    <a href="/admin/certificates/{{ t.id }}" class="tpl-thumb"><img loading="lazy" src="/admin/certificates/{{ t.id }}/preview.png?w=520&v={{ t.design_json|length }}{{ t.width }}" alt=""></a>
+    <div class="tpl-body">
+      <div class="tpl-title"><a href="/admin/certificates/{{ t.id }}"><b>{{ t.name }}</b></a>
+        {% if t.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge">nofaol</span>{% endif %}</div>
+      <div class="btns mt-s">
+        <a class="btn sm primary" href="/admin/certificates/{{ t.id }}">✏️ Dizayn</a>
+        <form method="post" action="/admin/certificates/{{ t.id }}/duplicate" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">⧉ Nusxa</button></form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <a class="tpl-card tpl-add" href="/admin/certificates/new?kind=pass">＋ Yangi ruxsatnoma shabloni</a>
+</div>
+
+<div class="card" id="fonts">
+  <h2>🔤 O'z shriftingiz</h2>
+  <p class="muted small">Dizaynerda 15 ta tayyor shrift bor (lotin va kirill harflari bilan). Boshqa shrift kerak bo'lsa, .ttf yoki .otf faylini yuklang.
+    Shriftda o'zbek harflari (Ўў Ққ Ғғ Ҳҳ, oʻ) bo'lmasa, o'sha matn avtomatik DejaVu Sans bilan chiqadi.</p>
+  {% set cf = setting_json('custom_fonts') %}
+  {% if cf %}<ul class="small">{% for f in cf %}<li><b>{{ f.name }}</b>{% if f.bold %} (oddiy + qalin){% endif %}
+    <form method="post" action="/admin/certificates/fonts/{{ f.key }}/delete" class="inline" data-confirm="Shrift o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">O'chirish</button></form></li>{% endfor %}</ul>{% endif %}
+  <form method="post" action="/admin/certificates/fonts/upload" enctype="multipart/form-data" class="filters">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label class="small">Nomi</label><input type="text" name="name" placeholder="Masalan: Mening shriftim" maxlength="40"></div>
+    <div><label class="small">Oddiy (.ttf/.otf) *</label><input type="file" name="regular" accept=".ttf,.otf" required></div>
+    <div><label class="small">Qalin (ixtiyoriy)</label><input type="file" name="bold" accept=".ttf,.otf"></div>
+    <div class="btns"><button class="btn">⬆️ Yuklash</button></div>
+  </form>
+</div>
 {% endblock %}

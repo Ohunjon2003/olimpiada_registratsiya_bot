@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% from "macros.html" import pager, select %}
+{% block title %}Titul va skaner{% endblock %}
+{% block crumbs %}Avtomatik tekshiruv{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>📝 Titul va avtomatik tekshiruv</h1>
+    <div class="muted">Har o'quvchiga shaxsiy titul (QR + ID) → hakam telefonda skaner qiladi → ball avtomatik yoziladi. Qo'lda kiritish ham ishlayveradi.</div></div>
+  <div class="btns">
+    {% if rounds|length > 1 %}<form method="get" class="inline"><input type="hidden" name="tab" value="{{ tab }}">
+      <select name="round_id" onchange="this.form.submit()">{% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></form>{% endif %}
+    <a class="btn primary" href="/scan">📷 Skanerni ochish</a>
+  </div>
+</div>
+
+<div class="tabs mb">
+  {% for k, l in [('setup', '⚙️ Fanlar va kalitlar'), ('print', '🖨 Titullarni chop etish'), ('review', '🔎 Tekshirish kerak'), ('scans', '🗂 Ishlar')] %}
+  <a href="?tab={{ k }}&round_id={{ round.id }}" class="{% if tab == k %}active{% endif %}">{{ l }}{% if k == 'review' and review_n %} <span class="badge warn">{{ review_n }}</span>{% endif %}</a>
+  {% endfor %}
+</div>
+
+{# ------------------------------------------------------------------ SOZLASH #}
+{% if tab == 'setup' %}
+<form method="post" action="/admin/omr/settings" class="card mb">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>🛡 Titul almashib qolmasligi</h2>
+  <p class="muted small">Titulda QR (o'quvchi ID si, imzolangan) va o'quvchi o'zi belgilaydigan ID doirachalari bor. Skanerda ikkalasi solishtiriladi:
+    mos kelmasa — natija yozilmaydi, «🔎 Tekshirish kerak»ga tushadi. Titullar xona va o'rin tartibida chop etiladi, titulda xona va o'rin raqami yoziladi —
+    nazoratchi ularni o'quvchilar kelguncha partalarga qo'yib chiqadi.</p>
+  <label class="check field"><input type="checkbox" name="omr_id_required" {% if setting('omr_id_required') %}checked{% endif %}> ID belgilamagan o'quvchining natijasi ham admin tasdig'iga tushsin <span class="muted">(tavsiya)</span></label>
+  <label class="check field"><input type="checkbox" name="omr_show_name" {% if setting('omr_show_name') %}checked{% endif %}> Titulda o'quvchi ismi ham yozilsin <span class="muted">(o'chiq bo'lsa — hakam faqat ID ni ko'radi)</span></label>
+  <div class="btns"><button class="btn">Saqlash</button></div>
+</form>
+
+{% for s in subjects %}{% set err = ready[s.id] %}
+<div class="card mb" id="s{{ s.id }}">
+  <div class="page-head" style="margin:0 0 6px">
+    <div><h2 style="margin:0">📘 {{ s.name }} {% if s.omr_enabled %}<span class="badge ok">avtomatik</span>{% else %}<span class="badge">qo'lda</span>{% endif %}</h2>
+      <div class="muted small">{{ s.question_total }} savol · {{ takers[s.id] }} o'quvchi ·
+        skanerlangan: <b>{{ counts.get((s.id, 'applied'), 0) }}</b>{% if counts.get((s.id, 'review')) %} · <span class="badge warn">{{ counts[(s.id, 'review')] }} tekshirishda</span>{% endif %}</div></div>
+    {% if not err %}<a class="btn sm" href="/admin/omr/sample/{{ s.id }}.png" target="_blank">👁 Titul namunasi</a>{% endif %}
+  </div>
+  {% if err %}<div class="muted small">⛔️ {{ err }}</div>
+  {% else %}
+  <form method="post" action="/admin/omr/subject/{{ s.id }}" class="filters">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="omr_enabled" {% if s.omr_enabled %}checked{% endif %}> Titul bilan avtomatik tekshirish</label>
+    <div><label class="small">Variantlar</label><select name="variants">
+      {% for v in range(1, 5) %}<option value="{{ v }}" {% if s.variants == v %}selected{% endif %}>{{ 'Variantsiz' if v == 1 else v ~ ' ta (' ~ 'ABCD'[:v]|list|join(', ') ~ ')' }}</option>{% endfor %}</select></div>
+    <div class="btns"><button class="btn sm">Saqlash</button></div>
+  </form>
+  {% if s.variants > 1 %}<div class="help">Variant o'rin bo'yicha shaxmat tartibida beriladi — yonma-yon va old-orqadagilar turli variantda. Titulda «B variant» deb yoziladi.</div>{% endif %}
+  {% if s.omr_enabled %}
+  <form method="post" action="/admin/omr/key/{{ s.id }}" class="mt-s">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+    <div class="grid g2">
+    {% for v in range(s.variants) %}{% set k = keys.get((s.id, v)) %}
+      <div class="field"><label>🔑 Kalit{% if s.variants > 1 %} — {{ 'ABCD'[v] }} variant{% endif %} ({{ s.question_total }} ta javob)
+        {% if k and k.answers %}<span class="badge ok">kiritilgan</span> <span class="muted small">{{ k.updated_by }}, {{ k.updated_at|dt }}</span>{% else %}<span class="badge warn">yo'q</span>{% endif %}</label>
+        <textarea name="key_{{ v }}" rows="2" placeholder="Masalan: ABCDA BCDAB … (bo'sh joy va vergul e'tiborga olinmaydi)" spellcheck="false" style="font-family:monospace">{{ k.answers if k else '' }}</textarea></div>
+    {% endfor %}
+    </div>
+    <div class="help mb">Kalitni olimpiadadan keyin kiritish mumkin — oldin skanerlangan ishlar avtomatik hisoblanadi. Kalit o'zgarsa (xato topilsa) — hamma ishlar qayta hisoblanadi.</div>
+    <div class="btns"><button class="btn primary">💾 Kalitni saqlash va hisoblash</button></div>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% else %}<div class="card empty">Fanlar yo'q</div>{% endfor %}
+{% endif %}
+
+{# ------------------------------------------------------------------ CHOP ETISH #}
+{% if tab == 'print' %}
+<div class="grid g2">
+  <div class="card">
+    <h2>🖨 Titullar (PDF)</h2>
+    <form hx-post="/admin/omr/print" hx-target="#job" hx-swap="innerHTML">
+      <input type="hidden" name="round_id" value="{{ round.id }}">
+      <div class="field"><label>Fan</label><select name="subject_id" required>
+        {% for s in subjects if s.omr_enabled %}<option value="{{ s.id }}">{{ s.name }} ({{ takers[s.id] }} ta)</option>{% else %}<option value="">— avval fanda avtomatik tekshiruvni yoqing —</option>{% endfor %}</select></div>
+      <div class="field"><label>Smena</label><select name="session_id"><option value="">Hammasi</option>
+        {% for e in exam_sessions %}<option value="{{ e.id }}">{{ e.name }} · {{ e.day.strftime('%d.%m') }} {{ e.start_time }}</option>{% endfor %}</select></div>
+      <div class="btns"><button class="btn primary">📄 PDF tayyorlash</button></div>
+    </form>
+    <div id="job"></div>
+  </div>
+  <div class="card">
+    <h2>📋 Yo'riqnoma</h2>
+    <ul class="small">
+      <li>40 tagacha savol — A4 varaqqa <b>4 ta</b> titul, 100 tagacha — 2 ta, undan ko'p — 1 ta. Punktir bo'yicha qirqing.</li>
+      <li>Titullar <b>smena → xona → o'rin</b> tartibida — har xona uchun tayyor dasta. Titulda xona va o'rin yozilgan.</li>
+      <li>Printerda <b>«Haqiqiy o'lcham / 100%»</b> ni tanlang, «Sahifaga moslash»ni o'chiring. Oq qog'oz, toza nusxa.</li>
+      <li>O'quvchiga: ID raqamini kataklarga yozib, pastidagi doirachalarni bo'yasin (ID ruxsatnomasida). Doirachani to'liq bo'yasin.</li>
+      <li>Titulni bukmaslik, ustiga yozmaslik kerak — burchakdagi qora kvadratlar va QR toza bo'lsin.</li>
+      <li>Fan sozlamasi (savollar soni) titul chop etilgandan keyin o'zgarsa — titullarni qayta chop eting.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------ TEKSHIRISH #}
+{% if tab == 'review' %}
+{% if items|selectattr('reason', 'equalto', 'id_empty')|list %}
+<form method="post" action="/admin/omr/review/accept-empty" class="card mb" data-confirm="ID belgilanmagan barcha ishlar QR'dagi o'quvchiga yozilsinmi?">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+  <div class="btns"><button class="btn">✅ «ID belgilanmagan»larning hammasini QR bo'yicha tasdiqlash</button>
+    <span class="muted small">Titul o'rin tartibida tarqatilgan bo'lsa — odatda xavfsiz.</span></div>
+</form>
+{% endif %}
+{% for sc in items %}{% set qp = sc.participant %}{% set mp = marked_people.get(sc.id_marked) %}
+<div class="card mb review-item">
+  <a href="/admin/omr/scan/{{ sc.id }}" class="review-img"><img loading="lazy" src="/admin/omr/scan/{{ sc.id }}/sheet.jpg" alt=""></a>
+  <div>
+    <div class="btns" style="justify-content:space-between"><b>№{{ sc.id }} · {{ sc.subject.name }}</b><span class="badge warn">{{ reasons.get(sc.reason, sc.reason) }}</span></div>
+    <table class="small mt-s"><tbody>
+      <tr><td class="muted">QR (titul egasi)</td><td><b>ID {{ qp.code }}</b> — {{ qp.full_name }}, {{ qp.school.name }}, {{ qp.grade.name }}-sinf</td></tr>
+      <tr><td class="muted">O'quvchi belgilagan ID</td><td><b>{{ sc.id_marked.replace('_', '·') }}</b>{% if mp %} — {{ mp.full_name }}, {{ mp.school.name }}{% elif sc.id_marked.isdigit() %} — <span class="err-text">bunday o'quvchi yo'q</span>{% endif %}</td></tr>
+      <tr><td class="muted">Natija (taxminiy)</td><td>{% if sc.correct is not none %}{{ sc.correct }}/{{ sc.answers|length }} ({{ sc.percent|num }}%){% else %}kalit yo'q{% endif %}</td></tr>
+      <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>
+    </tbody></table>
+    <form method="post" action="/admin/omr/scan/{{ sc.id }}/resolve" class="filters mt-s">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/admin/omr?tab=review&round_id={{ round.id }}">
+      {% if '?' in sc.answers %}<div class="grow"><label class="small">Javoblar («?» — aniq emas, almashtiring)</label><input type="text" name="answers" value="{{ sc.answers }}" style="font-family:monospace"></div>{% endif %}
+      <div class="btns">
+        <button class="btn sm primary" name="action" value="accept">✅ ID {{ qp.code }} ga yozish</button>
+        {% if mp and mp.id != qp.id %}<button class="btn sm" name="action" value="accept_marked">↪ ID {{ mp.code }} ga yozish</button>{% endif %}
+        <button class="btn sm danger" name="action" value="reject">✕ Rad etish</button>
+        <a class="btn sm" href="/admin/omr/scan/{{ sc.id }}">🔎 Batafsil</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% else %}<div class="card empty">🎉 Tekshirish kerak bo'lgan ish yo'q</div>{% endfor %}
+{% endif %}
+
+{# ------------------------------------------------------------------ ISHLAR #}
+{% if tab == 'scans' %}
+<form class="card filters mb" method="get">
+  <input type="hidden" name="tab" value="scans"><input type="hidden" name="round_id" value="{{ round.id }}">
+  <div class="grow"><label class="small">Qidiruv</label><input type="search" name="q" value="{{ params.get('q', '') }}" placeholder="ID, ism, familiya"></div>
+  {{ select('subject_id', subjects|selectattr('omr_enabled')|list, params.get('subject_id', ''), label='Fan') }}
+  {{ select('school_id', schools, params.get('school_id', ''), label='Maktab') }}
+  {{ select('grade_id', grades, params.get('grade_id', ''), label='Sinf') }}
+  <div><label class="small">Holat</label><select name="status">{% for k, l in statuses.items() %}<option value="{{ k }}" {% if params.get('status', 'applied') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label class="small">Foiz (dan–gacha)</label><div class="btns"><input type="number" name="min" value="{{ params.get('min', '') }}" style="width:70px" min="0" max="100"><input type="number" name="max" value="{{ params.get('max', '') }}" style="width:70px" min="0" max="100"></div></div>
+  <div><label class="small">Botga</label><select name="sent"><option value="">Hammasi</option><option value="no" {% if params.get('sent') == 'no' %}selected{% endif %}>Hali yuborilmagan</option></select></div>
+  <div class="btns"><button class="btn primary">Filtrlash</button><a class="btn" href="?tab=scans&round_id={{ round.id }}">Tozalash</a></div>
+</form>
+<form method="post" action="/admin/omr/send" id="send-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+  <input type="hidden" name="subject_id" value="{{ params.get('subject_id', '') }}">
+  <input type="hidden" name="back" value="/admin/omr?tab=scans&round_id={{ round.id }}">
+  <div class="btns mb">
+    <button class="btn" name="mode" value="selected" data-confirm-sel>📨 Tanlanganlarga tekshirilgan titulni yuborish</button>
+    {% if all_pids %}<button class="btn" name="all_pids" value="{{ all_pids }}" onclick="document.querySelectorAll('input[name=pid]').forEach(function(c){c.checked=false})" data-confirm="Filtrdagi {{ page.total }} ta ishning hammasi o'quvchilarga yuborilsinmi?">📨 Filtrdagilarning hammasiga ({{ page.total }})</button>{% endif %}
+    <span class="muted small">O'quvchiga to'g'ri (yashil) va xato (qizil) javoblari belgilangan rasm boradi.</span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('input[name=pid]').forEach(c => c.checked = this.checked)"></th>
+      <th>ID</th><th>Familiya Ism</th><th>Maktab</th><th>Fan</th><th>Natija</th><th>Holat</th><th>Skaner</th><th>Botga</th><th></th></tr></thead>
+    <tbody>
+    {% for sc in items %}{% set p = sc.participant %}
+    <tr>
+      <td><input type="checkbox" name="pid" value="{{ p.id }}"></td>
+      <td>{{ p.code }}</td><td><a href="/admin/participants/{{ p.id }}">{{ p.full_name }}</a></td>
+      <td class="small">{{ p.school.name }}, {{ p.grade.name }}</td><td>{{ sc.subject.name }}{% if sc.subject.variants > 1 %} <span class="muted">({{ 'ABCD'[sc.variant] }})</span>{% endif %}</td>
+      <td>{% if sc.correct is not none %}<b>{{ sc.correct }}</b>/{{ sc.answers|length }} · {{ sc.percent|num }}%{% else %}<span class="muted">kalit yo'q</span>{% endif %}</td>
+      <td><span class="badge {{ 'ok' if sc.status == 'applied' else ('warn' if sc.status == 'review' else '') }}">{{ statuses[sc.status] }}</span></td>
+      <td class="small">{{ sc.scanned_by }}<br>{{ sc.scanned_at|dt }}</td>
+      <td class="small">{{ (sc.sent_at|dt) if sc.sent_at else '—' }}</td>
+      <td><a class="btn sm" href="/admin/omr/scan/{{ sc.id }}">👁</a></td>
+    </tr>
+    {% else %}<tr><td colspan="10" class="empty">Ishlar yo'q</td></tr>{% endfor %}
+    </tbody></table></div>
+</form>
+{{ pager(page) }}
+{% endif %}
+{% endblock %}

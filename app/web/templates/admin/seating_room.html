@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ room.name }} — sxema{% endblock %}
+{% block crumbs %}<a href="/admin/seating?tab=plan&round_id={{ round.id }}">Joylashtirish</a> / {{ room.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🚪 {{ room.name }}{% if room.floor %} <span class="muted">({{ room.floor }}-qavat)</span>{% endif %}</h1>
+    <div class="muted">{{ room.building.name if room.building else '' }} · {{ room.rows }} qator × {{ room.desks }} parta × {{ room.seats_per_desk }} o'rin
+      = <b>{{ capacity }}</b> o'rin{% if one and room.seats_per_desk > 1 %} (har partaga 1 kishi rejimi){% endif %}</div></div>
+  <div class="btns">
+    {% if prev_room %}<a class="btn" href="/admin/seating/room/{{ prev_room.id }}?session_id={{ sess.id if sess else '' }}&round_id={{ round.id }}">◀ {{ prev_room.name }}</a>{% endif %}
+    {% if next_room %}<a class="btn" href="/admin/seating/room/{{ next_room.id }}?session_id={{ sess.id if sess else '' }}&round_id={{ round.id }}">{{ next_room.name }} ▶</a>{% endif %}
+  </div>
+</div>
+
+{% if sessions %}
+<div class="tabs mb">{% for s in sessions %}<a href="?session_id={{ s.id }}&round_id={{ round.id }}" class="{% if sess and s.id == sess.id %}active{% endif %}">{{ s.name }} · {{ s.day.strftime('%d.%m') }} {{ s.start_time }}</a>{% endfor %}</div>
+{% endif %}
+
+<div class="seat-layout">
+  <div>
+    <div class="card">
+      <div class="btns mb">
+        <span class="small"><b>{{ placed|length }}</b> o'quvchi · {{ schools|length }} maktab</span>
+        {% if conflicts %}<span class="badge err">⚠ {{ conflicts|length }} juftlik bir maktabdan yaqin</span>{% elif placed %}<span class="badge ok">bir maktabdan qo'shni yo'q 👍</span>{% endif %}
+        <label class="check small" style="margin-left:auto"><input type="checkbox" id="mode-disable"> 🚫 Singan o'rinlarni belgilash rejimi</label>
+      </div>
+      <div class="board">DOSKA</div>
+      <div class="seat-grid" style="--desks: {{ room.desks }}; --spd: {{ room.seats_per_desk }}">
+        {% for r in range(1, room.rows + 1) %}
+        <div class="seat-row">
+          {% for d in range(1, room.desks + 1) %}
+          <div class="desk">
+            {% for s in range(1, room.seats_per_desk + 1) %}{% set key = r ~ '-' ~ d ~ '-' ~ s %}{% set a = placed.get((r, d, s)) %}
+            {% if a %}{% set p = a.participant %}
+            <button type="button" class="seat taken {{ 'bad' if (r, d, s) in bad else '' }}" data-seat="{{ key }}" data-aid="{{ a.id }}"
+                    style="background: {{ colors.get(p.school_id, '#eee') }}" title="{{ p.full_name }} — {{ p.school.name }}, {{ p.grade.name }}-sinf">
+              <span class="no">{{ seat_number(room, (r, d, s)) }}</span><span class="code">{{ p.code }}</span>
+              <span class="nm">{{ p.last_name }}</span><span class="nm2">{{ p.first_name }}</span>
+              {% if a.pass_sent_at %}<span class="sent" title="Ruxsatnoma yuborilgan">🎫</span>{% endif %}
+            </button>
+            {% elif key in disabled %}
+            <button type="button" class="seat off" data-seat="{{ key }}" title="O'chirilgan o'rin"><span class="no">{{ seat_number(room, (r, d, s)) }}</span>🚫</button>
+            {% else %}
+            <button type="button" class="seat free {{ 'unused' if one and s > 1 else '' }}" data-seat="{{ key }}"><span class="no">{{ seat_number(room, (r, d, s)) }}</span></button>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <p class="muted small mt-s">Ko'chirish: o'quvchini bosing, so'ng bo'sh o'rinni (yoki boshqa o'quvchini — almashtiriladi) bosing. 🎫 — ruxsatnoma yuborilgan: joyi o'zgarsa yangisi avtomatik boradi.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="card mb hidden" id="sel-card">
+      <h3>Tanlangan o'quvchi</h3>
+      <div id="sel-info" class="small mb"></div>
+      <form method="post" action="/admin/seating/move" class="filters">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="assignment_id" id="mv-aid">
+        <input type="hidden" name="back" value="/admin/seating/room/{{ room.id }}?session_id={{ sess.id if sess else '' }}&round_id={{ round.id }}">
+        <div><label class="small">Smena</label><select name="session_id">{% for s in sessions %}<option value="{{ s.id }}" {% if sess and s.id == sess.id %}selected{% endif %}>{{ s.name }} · {{ s.day.strftime('%d.%m') }} {{ s.start_time }}</option>{% endfor %}</select></div>
+        <div><label class="small">Xona</label><select name="room_id">{% for r in rooms %}<option value="{{ r.id }}" {% if r.id == room.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+        <div class="btns"><button class="btn">↪ Boshqa xona/smenaga</button></div>
+      </form>
+      <div class="help">Eng mos bo'sh o'ringa qo'yiladi (maktabdoshlari yonida emas).</div>
+      <button type="button" class="btn sm mt-s" id="sel-cancel">✕ Bekor qilish</button>
+    </div>
+
+    {% if schools %}
+    <div class="card mb">
+      <h3>Maktablar</h3>
+      {% for sid, n in schools.most_common() %}
+      <div class="legend"><span class="sw" style="background: {{ colors[sid] }}"></span>{{ school_names.get(sid, '—') }} <b>{{ n }}</b></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <details class="card">
+      <summary><b>✏️ Xonani tahrirlash</b></summary>
+      <form method="post" action="/admin/seating/room/{{ room.id }}" class="mt-s">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="grid g2">
+          <div class="field"><label>Nomi</label><input type="text" name="name" value="{{ room.name }}" required></div>
+          <div class="field"><label>Qavat</label><input type="text" name="floor" value="{{ room.floor }}"></div>
+          <div class="field"><label>Qatorlar</label><input type="number" name="rows" value="{{ room.rows }}" min="1" max="30"></div>
+          <div class="field"><label>Qatorda parta</label><input type="number" name="desks" value="{{ room.desks }}" min="1" max="12"></div>
+          <div class="field"><label>Partada o'rin</label><input type="number" name="seats_per_desk" value="{{ room.seats_per_desk }}" min="1" max="4"></div>
+          <div class="field"><label>Bino</label><select name="building_id">{% for b in buildings %}<option value="{{ b.id }}" {% if b.id == room.building_id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
+        </div>
+        <label class="check field"><input type="checkbox" name="is_active" {% if room.is_active %}checked{% endif %}> Faol (taqsimlashda ishlatiladi)</label>
+        <div class="btns"><button class="btn primary">Saqlash</button></div>
+      </form>
+      <form method="post" action="/admin/seating/room/{{ room.id }}/delete" class="mt-s" data-confirm="Xona o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">🗑 Xonani o'chirish</button></form>
+    </details>
+  </div>
+</div>
+
+<form method="post" action="/admin/seating/move" id="swap-form" class="hidden">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="assignment_id"><input type="hidden" name="seat">
+  <input type="hidden" name="session_id" value="{{ sess.id if sess else '' }}"><input type="hidden" name="room_id" value="{{ room.id }}">
+  <input type="hidden" name="back" value="/admin/seating/room/{{ room.id }}?session_id={{ sess.id if sess else '' }}&round_id={{ round.id }}">
+</form>
+<form method="post" action="/admin/seating/room/{{ room.id }}/toggle-seat" id="toggle-form" class="hidden">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="seat">
+  <input type="hidden" name="back" value="session_id={{ sess.id if sess else '' }}&round_id={{ round.id }}">
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var selBtn = null, card = document.getElementById('sel-card');
+  var modeDisable = document.getElementById('mode-disable');
+  function clear() { if (selBtn) selBtn.classList.remove('picked'); selBtn = null; card.classList.add('hidden'); }
+  document.getElementById('sel-cancel').addEventListener('click', clear);
+  document.querySelectorAll('.seat').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var seat = b.getAttribute('data-seat');
+      if (modeDisable.checked) {
+        if (b.classList.contains('taken')) { alert('Bu o\'rinda o\'quvchi bor. Avval uni ko\'chiring.'); return; }
+        var f = document.getElementById('toggle-form'); f.seat.value = seat; f.submit(); return;
+      }
+      if (!selBtn) {
+        if (!b.classList.contains('taken')) return;
+        selBtn = b; b.classList.add('picked');
+        document.getElementById('mv-aid').value = b.getAttribute('data-aid');
+        document.getElementById('sel-info').textContent = b.title;
+        card.classList.remove('hidden');
+        return;
+      }
+      if (b === selBtn) { clear(); return; }
+      if (b.classList.contains('off')) return;
+      var f2 = document.getElementById('swap-form');
+      f2.assignment_id.value = selBtn.getAttribute('data-aid'); f2.seat.value = seat;
+      f2.submit();
+    });
+  });
+})();
+</script>
+{% endblock %}

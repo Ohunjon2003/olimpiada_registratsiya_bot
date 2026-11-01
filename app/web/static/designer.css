@@ -1,0 +1,79 @@
+/* Dizayner sahifasi uslublari */
+.dz-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.dz-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dz-title h1 { margin: 0; }
+.ok-text { color: var(--ok); }
+.err-text { color: var(--err); }
+
+.dz-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; margin-bottom: 10px; position: sticky; top: 0; z-index: 20; }
+.dz-toolbar > button, .dz-drop > button, .dz-file { border: 1px solid transparent; background: none; padding: 6px 10px; border-radius: 8px;
+  font: inherit; cursor: pointer; color: var(--ink); white-space: nowrap; }
+.dz-toolbar > button:hover, .dz-drop > button:hover, .dz-file:hover { background: var(--brand-soft); }
+.dz-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.dz-check { display: flex; align-items: center; gap: 4px; font-size: 13px; padding: 0 6px; }
+#dz-sample-name { width: 230px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13px; }
+.dz-file { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+.dz-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.dz-drop { position: relative; }
+.dz-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 30; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(16,24,40,.15); padding: 6px; min-width: 260px; max-height: 60vh; overflow: auto; }
+.dz-menu.open { display: block; }
+.dz-menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.dz-menu button:hover { background: var(--brand-soft); }
+.dz-menu code { font-size: 11.5px; margin-right: 4px; }
+
+.dz { display: grid; grid-template-columns: 1fr 340px; gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .dz { grid-template-columns: 1fr; } }
+.dz-stage-wrap { background: #dfe3ea; border-radius: var(--radius); overflow: auto; padding: 16px; min-height: 420px;
+  max-height: calc(100vh - 150px); display: flex; }
+.dz-stage { margin: auto; }
+.dz-svg { display: block; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.18); touch-action: none; user-select: none; -webkit-user-select: none; }
+.dz-svg text { white-space: pre; }
+.dz-svg g[data-id] { cursor: move; }
+.dz-over .dz-sel { fill: none; stroke: #2563eb; pointer-events: none; }
+.dz-over .dz-sel.locked { stroke: #f59e0b; stroke-dasharray: 4 3; }
+.dz-over .dz-handle { fill: #fff; stroke: #2563eb; cursor: pointer; }
+.dz-over [data-handle=nw], .dz-over [data-handle=se] { cursor: nwse-resize; }
+.dz-over [data-handle=ne], .dz-over [data-handle=sw] { cursor: nesw-resize; }
+.dz-over [data-handle=n], .dz-over [data-handle=s] { cursor: ns-resize; }
+.dz-over [data-handle=e], .dz-over [data-handle=w] { cursor: ew-resize; }
+.dz-over .dz-handle.rot { cursor: grab; fill: #2563eb; }
+.dz-guide { stroke: #ec4899; pointer-events: none; }
+
+.dz-side { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px;
+  max-height: calc(100vh - 110px); overflow: auto; position: sticky; top: 60px; }
+.dz-tabs { margin-bottom: 12px; }
+.dz-ptitle { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.dz-side .field { margin-bottom: 10px; }
+.dz-side .grid.g2 { gap: 8px; }
+.dz-side input[type=number], .dz-side input[type=text], .dz-side select, .dz-side textarea { width: 100%; }
+.dz-side input[type=color] { width: 100%; height: 34px; padding: 2px; }
+.dz-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.dz-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dz-seg button { border: 0; background: #fff; padding: 6px 10px; cursor: pointer; font: inherit; border-right: 1px solid var(--line); }
+.dz-seg button:last-child { border-right: 0; }
+.dz-seg button.on { background: var(--brand); color: #fff; }
+.dz-more { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+.dz-more summary { list-style: none; cursor: pointer; }
+.dz-more summary::-webkit-details-marker { display: none; }
+.dz-more .grid { margin-top: 8px; }
+.dz-actions { margin-top: 6px; }
+.dz-hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.mt-s { margin-top: 6px; }
+.chips .chip { cursor: pointer; }
+
+.dz-layers { display: flex; flex-direction: column; gap: 2px; }
+.dz-layer { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.dz-layer:hover { background: #f5f7fb; }
+.dz-layer.on { background: var(--brand-soft); border-color: #c7d5fb; }
+.dz-layer.off .nm { opacity: .45; text-decoration: line-through; }
+.dz-layer .ico { width: 20px; text-align: center; }
+.dz-layer .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.dz-layer button { border: 0; background: none; cursor: pointer; padding: 2px 4px; font-size: 12px; opacity: .7; }
+.dz-layer button:hover { opacity: 1; }
+
+.dz-modal { position: fixed; inset: 0; background: rgba(15,23,42,.6); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.dz-modal-box { background: #fff; border-radius: 12px; padding: 12px; max-width: min(1200px, 96vw); max-height: 94vh; overflow: auto; }
+.dz-modal-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.dz-modal img { max-width: 100%; display: block; border: 1px solid var(--line); }
