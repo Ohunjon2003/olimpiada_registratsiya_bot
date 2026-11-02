@@ -5,13 +5,26 @@
 {% block content %}
 <div class="page-head">
   <div><h1>📝 Titul va avtomatik tekshiruv</h1>
-    <div class="muted">Har o'quvchiga shaxsiy titul (QR + ID) → hakam telefonda skaner qiladi → ball avtomatik yoziladi. Qo'lda kiritish ham ishlayveradi.</div></div>
+    <div class="muted">Har o'quvchiga shaxsiy titul (kod + ID) → hakam telefonda skaner qiladi → ball avtomatik yoziladi. Qo'lda kiritish ham ishlayveradi.</div></div>
   <div class="btns">
     {% if rounds|length > 1 %}<form method="get" class="inline"><input type="hidden" name="tab" value="{{ tab }}">
       <select name="round_id" onchange="this.form.submit()">{% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></form>{% endif %}
     <a class="btn primary" href="/scan">📷 Skanerni ochish</a>
   </div>
 </div>
+
+<details class="card mb omr-how" {% if not subjects|selectattr('omr_enabled')|list %}open{% endif %}>
+  <summary><b>🧭 Tartib (7 qadam)</b> <span class="muted small">— bosib oching</span></summary>
+  <ol class="small">
+    <li><b>Fanni yoqing</b> — pastda «Titul bilan avtomatik tekshirish» belgisini qo'yib «Saqlash».</li>
+    <li><b>Joylashtiring</b> (🪑 Joylashtirish) — titullar xona va o'rin tartibida chiqadi.</li>
+    <li><b>Chop eting</b> — «🖨 Titullarni chop etish» → PDF → printerda <b>100% (haqiqiy o'lcham)</b>.</li>
+    <li><b>O'quvchilarga qo'llanma</b> — o'sha bo'limdagi havola/PDF (ID va javobni qanday bo'yash).</li>
+    <li><b>Skaner</b> — olimpiadadan keyin hakamlar telefonda «📷 Skaner»ni ochib titullarni tutadi.</li>
+    <li><b>Kalit</b> — «🔑 Kalitni kiritish» (oldin ham, keyin ham bo'ladi) — ball o'zi hisoblanadi.</li>
+    <li><b>«🔎 Tekshirish kerak»</b> navbatini nolga tushiring (ID mos kelmagan, aniq o'qilmagan ishlar).</li>
+  </ol>
+</details>
 
 <div class="tabs mb">
   {% for k, l in [('setup', '⚙️ Fanlar va kalitlar'), ('print', '🖨 Titullarni chop etish'), ('review', '🔎 Tekshirish kerak'), ('scans', '🗂 Ishlar')] %}
@@ -24,7 +37,7 @@
 <form method="post" action="/admin/omr/settings" class="card mb">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <h2>🛡 Titul almashib qolmasligi</h2>
-  <p class="muted small">Titulda QR (o'quvchi ID si, imzolangan) va o'quvchi o'zi belgilaydigan ID doirachalari bor. Skanerda ikkalasi solishtiriladi:
+  <p class="muted small">Titulda imzolangan kod (o'ng tepadagi qora kataklar — titul egasi) va o'quvchi o'zi belgilaydigan ID doirachalari bor. Skanerda ikkalasi solishtiriladi:
     mos kelmasa — natija yozilmaydi, «🔎 Tekshirish kerak»ga tushadi. Titullar xona va o'rin tartibida chop etiladi, titulda xona va o'rin raqami yoziladi —
     nazoratchi ularni o'quvchilar kelguncha partalarga qo'yib chiqadi.</p>
   <label class="check field"><input type="checkbox" name="omr_id_required" {% if setting('omr_id_required') %}checked{% endif %}> ID belgilamagan o'quvchining natijasi ham admin tasdig'iga tushsin <span class="muted">(tavsiya)</span></label>
@@ -51,18 +64,15 @@
   </form>
   {% if s.variants > 1 %}<div class="help">Variant o'rin bo'yicha shaxmat tartibida beriladi — yonma-yon va old-orqadagilar turli variantda. Titulda «B variant» deb yoziladi.</div>{% endif %}
   {% if s.omr_enabled %}
-  <form method="post" action="/admin/omr/key/{{ s.id }}" class="mt-s">
-    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
-    <div class="grid g2">
+  <div class="keybox mt-s">
     {% for v in range(s.variants) %}{% set k = keys.get((s.id, v)) %}
-      <div class="field"><label>🔑 Kalit{% if s.variants > 1 %} — {{ 'ABCD'[v] }} variant{% endif %} ({{ s.question_total }} ta javob)
-        {% if k and k.answers %}<span class="badge ok">kiritilgan</span> <span class="muted small">{{ k.updated_by }}, {{ k.updated_at|dt }}</span>{% else %}<span class="badge warn">yo'q</span>{% endif %}</label>
-        <textarea name="key_{{ v }}" rows="2" placeholder="Masalan: ABCDA BCDAB … (bo'sh joy va vergul e'tiborga olinmaydi)" spellcheck="false" style="font-family:monospace">{{ k.answers if k else '' }}</textarea></div>
+      <div>🔑 Kalit{% if s.variants > 1 %} ({{ 'ABCD'[v] }} variant){% endif %}:
+        {% if k and k.answers %}<span class="badge ok">kiritilgan</span> <code class="small">{{ k.answers[:20] }}{{ '…' if k.answers|length > 20 }}</code> <span class="muted small">{{ k.updated_by }}, {{ k.updated_at|dt }}</span>
+        {% else %}<span class="badge warn">hali kiritilmagan</span>{% endif %}</div>
     {% endfor %}
-    </div>
-    <div class="help mb">Kalitni olimpiadadan keyin kiritish mumkin — oldin skanerlangan ishlar avtomatik hisoblanadi. Kalit o'zgarsa (xato topilsa) — hamma ishlar qayta hisoblanadi.</div>
-    <div class="btns"><button class="btn primary">💾 Kalitni saqlash va hisoblash</button></div>
-  </form>
+    <div class="btns mt-s"><a class="btn primary" href="/admin/omr/key/{{ s.id }}?round_id={{ round.id }}">🔑 Kalitni kiritish / tahrirlash</a></div>
+    <div class="help">Kalitni olimpiadadan keyin kiritish ham mumkin — oldin skanerlangan ishlar o'zi hisoblanadi. Kalit tuzatilsa — hamma ishlar qayta hisoblanadi.</div>
+  </div>
   {% endif %}
   {% endif %}
 </div>
@@ -91,7 +101,7 @@
       <li>Titullar <b>smena → xona → o'rin</b> tartibida — har xona uchun tayyor dasta. Titulda xona va o'rin yozilgan.</li>
       <li>Printerda <b>«Haqiqiy o'lcham / 100%»</b> ni tanlang, «Sahifaga moslash»ni o'chiring. Oq qog'oz, toza nusxa.</li>
       <li>O'quvchiga: ID raqamini kataklarga yozib, pastidagi doirachalarni bo'yasin (ID ruxsatnomasida). Doirachani to'liq bo'yasin.</li>
-      <li>Titulni bukmaslik, ustiga yozmaslik kerak — burchakdagi qora kvadratlar va QR toza bo'lsin.</li>
+      <li>Titulni bukmaslik, ustiga yozmaslik kerak — burchakdagi qora kvadratlar va kod kataklari toza bo'lsin.</li>
       <li>Fan sozlamasi (savollar soni) titul chop etilgandan keyin o'zgarsa — titullarni qayta chop eting.</li>
     </ul>
   </div>
@@ -119,9 +129,9 @@
 {# ------------------------------------------------------------------ TEKSHIRISH #}
 {% if tab == 'review' %}
 {% if items|selectattr('reason', 'equalto', 'id_empty')|list %}
-<form method="post" action="/admin/omr/review/accept-empty" class="card mb" data-confirm="ID belgilanmagan barcha ishlar QR'dagi o'quvchiga yozilsinmi?">
+<form method="post" action="/admin/omr/review/accept-empty" class="card mb" data-confirm="ID belgilanmagan barcha ishlar titul egasiga yozilsinmi?">
   <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
-  <div class="btns"><button class="btn">✅ «ID belgilanmagan»larning hammasini QR bo'yicha tasdiqlash</button>
+  <div class="btns"><button class="btn">✅ «ID belgilanmagan»larning hammasini titul egasiga tasdiqlash</button>
     <span class="muted small">Titul o'rin tartibida tarqatilgan bo'lsa — odatda xavfsiz.</span></div>
 </form>
 {% endif %}
@@ -131,7 +141,7 @@
   <div>
     <div class="btns" style="justify-content:space-between"><b>№{{ sc.id }} · {{ sc.subject.name }}</b><span class="badge warn">{{ reasons.get(sc.reason, sc.reason) }}</span></div>
     <table class="small mt-s"><tbody>
-      <tr><td class="muted">QR (titul egasi)</td><td><b>ID {{ qp.code }}</b> — {{ qp.full_name }}, {{ qp.school.name }}, {{ qp.grade.name }}-sinf</td></tr>
+      <tr><td class="muted">Titul egasi (kod)</td><td><b>ID {{ qp.code }}</b> — {{ qp.full_name }}, {{ qp.school.name }}, {{ qp.grade.name }}-sinf</td></tr>
       <tr><td class="muted">O'quvchi belgilagan ID</td><td><b>{{ sc.id_marked.replace('_', '·') }}</b>{% if mp %} — {{ mp.full_name }}, {{ mp.school.name }}{% elif sc.id_marked.isdigit() %} — <span class="err-text">bunday o'quvchi yo'q</span>{% endif %}</td></tr>
       <tr><td class="muted">Natija (taxminiy)</td><td>{% if sc.correct is not none %}{{ sc.correct }}/{{ sc.answers|length }} ({{ sc.percent|num }}%){% else %}kalit yo'q{% endif %}</td></tr>
       <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>

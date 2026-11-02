@@ -4,10 +4,7 @@
 {% block content %}
 <div class="page-head">
   <div><h1>Bosh sahifa</h1>
-    <div class="muted">Ro'yxatdan o'tish:
-      {% if reg_state == 'open' %}<span class="badge ok">ochiq</span>{% elif reg_state == 'closed' %}<span class="badge err">yopilgan</span>{% else %}<span class="badge warn">hali boshlanmagan</span>{% endif %}
-      {% if setting('registration_end') %}<span class="small">— tugash: {{ setting('registration_end')|dt }}</span>{% endif %}
-      {% if round %} · Joriy tur: <b>{{ round.name }}</b>{% endif %}
+    <div class="muted">{% if round %}Joriy tur: <b>{{ round.name }}</b>{% if round.is_locked %} 🔒 qulflangan{% endif %}{% else %}Tur belgilanmagan — <a href="/admin/c/rounds">tur yarating</a>{% endif %}
     </div>
   </div>
   <div class="btns">
@@ -15,6 +12,8 @@
     <a class="btn primary" href="/judge/enter">✍️ Ball kiritish</a>
   </div>
 </div>
+
+{% include "admin/_reg_card.html" %}
 
 <div class="quick">
   <a href="/attendance"><i>🙋</i>Davomat</a>

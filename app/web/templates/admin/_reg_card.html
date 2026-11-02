@@ -1,0 +1,46 @@
+{# Ro'yxatdan o'tishni boshqarish: holat, sanalar va «hozir to'xtatish / ochish» tugmalari #}
+{% set rs = reg_state %}{% set mode = setting('registration_mode') %}
+<div class="card mb reg-card {{ rs }}">
+  <div class="reg-head">
+    <div>
+      <h3 style="margin:0">📝 Ro'yxatdan o'tish:
+        {% if rs == 'open' %}<span class="badge ok">ochiq</span>{% elif rs == 'closed' %}<span class="badge err">yopilgan</span>{% else %}<span class="badge warn">hali boshlanmagan</span>{% endif %}</h3>
+      <div class="small muted">
+        {% if mode == 'closed' %}Siz qo'lda to'xtatgansiz — bot yangi o'quvchini qabul qilmaydi.
+        {% elif mode == 'open' %}Siz qo'lda ochgansiz — sanalardan qat'i nazar ochiq.
+        {% else %}Vaqt bo'yicha:
+          {% if setting('registration_start') %}boshlanishi {{ setting('registration_start')|dt }}{% else %}boshlanish sanasi yo'q{% endif %},
+          {% if setting('registration_end') %}tugashi <b>{{ setting('registration_end')|dt }}</b>{% else %}tugash sanasi yo'q (muddatsiz){% endif %}.
+        {% endif %}
+      </div>
+    </div>
+    <div class="btns">
+      {% if rs != 'closed' %}
+      <form method="post" action="/admin/registration" class="inline" data-confirm="Ro'yxatdan o'tishni HOZIR to'xtataymi? Bot yangi o'quvchilarni qabul qilmaydi (keyin qayta ochish mumkin).">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="close"><input type="hidden" name="back" value="{{ path }}">
+        <button class="btn danger">⏸ Hozir to'xtatish</button></form>
+      {% endif %}
+      {% if rs != 'open' %}
+      <form method="post" action="/admin/registration" class="inline" data-confirm="Ro'yxatdan o'tishni qayta ochaymi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="open"><input type="hidden" name="back" value="{{ path }}">
+        <button class="btn ok">▶️ Qayta ochish</button></form>
+      {% endif %}
+      {% if mode != 'auto' %}
+      <form method="post" action="/admin/registration" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="auto"><input type="hidden" name="back" value="{{ path }}">
+        <button class="btn">🕒 Sanalar bo'yicha</button></form>
+      {% endif %}
+      <a class="btn" href="/admin/settings">📅 Sanalarni o'zgartirish</a>
+    </div>
+  </div>
+  {% if rs == 'closed' %}
+  <div class="reg-next small">
+    <b>Ro'yxat yopildi — keyingi qadamlar:</b>
+    <a href="/admin/seating">🪑 Joylashtirish</a> →
+    <a href="/admin/seating?tab=plan">🎫 Ruxsatnoma</a> →
+    <a href="/attendance">🙋 Davomat</a> →
+    natijalar: <a href="/judge/enter">✍️ Ball kiritish</a> yoki <a href="/scan">📷 Skaner</a>
+    <span class="muted">(ikkalasi ham istalgan vaqtda ishlaydi — faqat fan 🔒 qulflanmagan bo'lsin)</span>
+  </div>
+  {% endif %}
+</div>

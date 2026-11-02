@@ -11,12 +11,20 @@
     <div class="muted small mb">Maks. ball: {{ it.subject.max_score|num }} · Ishtirokchilar: {{ it.total }}</div>
     <div class="progress"><div style="width:{{ pct|round(1) }}%"></div></div>
     <div class="small mt">Kiritilgan: <b>{{ it.entered }}</b> / {{ it.total }} ({{ pct|round(1) }}%) · Siz kiritgan: <b>{{ it.mine }}</b></div>
-    <div class="btns mt"><a class="btn primary" href="/judge/enter?subject_id={{ it.subject.id }}&status=missing">Kiritilmaganlar</a><a class="btn" href="/judge/enter?subject_id={{ it.subject.id }}">Hammasi</a></div>
+    {% if it.subject.is_locked or (round and round.is_locked) %}
+    <div class="alert warn small mt">🔒 Natijalar qulflangan — ball kiritib ham, skaner qilib ham bo'lmaydi. Kerak bo'lsa adminga ayting (admin «Bosh sahifa»da ochadi).</div>
+    {% else %}
+    <div class="btns mt">
+      {% if it.subject.omr_enabled %}<a class="btn primary" href="/scan">📷 Titullarni skaner qilish</a>{% endif %}
+      <a class="btn {{ '' if it.subject.omr_enabled else 'primary' }}" href="/judge/enter?subject_id={{ it.subject.id }}&status=missing">✍️ Kiritilmaganlar</a>
+      <a class="btn" href="/judge/enter?subject_id={{ it.subject.id }}">Hammasi</a></div>
+    {% endif %}
   </div>
 {% else %}<div class="card empty">Sizga fan biriktirilmagan yoki fanlar yo'q.</div>{% endfor %}
 </div>
 <div class="card mt small">
-  <b>Qanday kiritiladi:</b> katakka to'g'ri javoblar sonini yozing va <b>Enter</b> bosing — natija saqlanadi va kursor keyingi o'quvchiga o'tadi.
+  <b>📷 Skaner (titul bo'lsa):</b> «Skaner»ni oching, titulni stolga qo'yib telefonni ustida ushlang — yashil xabar chiqsa natija yozildi. Keyingi titulni qo'ying.<br>
+  <b>✍️ Qo'lda kiritish:</b> katakka to'g'ri javoblar sonini yozing va <b>Enter</b> bosing — natija saqlanadi va kursor keyingi o'quvchiga o'tadi.
   Ball va foiz avtomatik hisoblanadi. Xato kiritilsa qator qizil bo'ladi va saqlanmaydi.
 </div>
 {% endblock %}

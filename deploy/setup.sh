@@ -99,7 +99,8 @@ if systemctl is-active --quiet olimpiada; then
   IP=$(curl -s -4 ifconfig.me || hostname -I | awk '{print $1}')
   echo
   echo "✅ Tayyor!"
-  echo "   Panel: ${DOMAIN:+https://$DOMAIN}${DOMAIN:-http://$IP}"
+  if [[ -n "$DOMAIN" ]]; then URL="https://$DOMAIN"; else URL="http://$IP"; fi
+  echo "   Panel: $URL"
   echo "   Loglar: journalctl -u olimpiada -f"
   echo "   Kirgandan keyin parolni almashtiring va .env dagi ADMIN_PASSWORD ni tozalang."
 else

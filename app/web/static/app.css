@@ -484,3 +484,13 @@ details.inline-edit[open] > form:first-of-type { min-width: 300px; }
 .faq[open] > summary::after { content: "▴"; }
 .faq-body { padding: 4px 14px 10px; font-size: 13.5px; }
 .faq-body ol, .faq-body ul { padding-left: 20px; }
+
+/* Ro'yxatdan o'tish kartasi */
+.reg-card { border-left: 4px solid var(--ok); }
+.reg-card.closed { border-left-color: var(--err); }
+.reg-card.not_started { border-left-color: var(--warn); }
+.reg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.reg-next { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); line-height: 1.9; }
+.omr-how summary { cursor: pointer; }
+.omr-how ol { margin: 10px 0 0; padding-left: 20px; line-height: 1.8; }
+.keybox { background: #f8f9fc; border-radius: 10px; padding: 10px 12px; line-height: 2; }

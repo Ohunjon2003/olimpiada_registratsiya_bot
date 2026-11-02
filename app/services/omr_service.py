@@ -2,7 +2,7 @@
 kalit o'zgarganda qayta hisoblash, titullarni chop etish ro'yxati.
 
 Qoidalar:
-  * Natija o'quvchiga faqat titul QR'idagi ID va o'quvchi o'zi belgilagan ID mos kelsa yoziladi.
+  * Natija o'quvchiga faqat titul kodidagi ID va o'quvchi o'zi belgilagan ID mos kelsa yoziladi.
     Mos kelmasa yoki ID belgilanmagan bo'lsa — «Tekshirish kerak» (admin hal qiladi).
   * Shu titul qayta skaner qilinsa: javoblar bir xil — «oldin kiritilgan» ogohlantirishi, hech narsa o'zgarmaydi;
     farq qilsa — eski natija saqlanadi, yangisi admin tasdig'iga tushadi.
@@ -34,7 +34,7 @@ from .scoring import ScoreError, compute
 
 STATUS = {"applied": "Qabul qilingan", "review": "Tekshirish kerak", "rejected": "Rad etilgan",
           "superseded": "Almashtirilgan"}
-REASONS = {"id_mismatch": "QR va o'quvchi belgilagan ID farq qiladi", "id_empty": "O'quvchi ID belgilamagan",
+REASONS = {"id_mismatch": "Titul kodi va o'quvchi belgilagan ID farq qiladi", "id_empty": "O'quvchi ID belgilamagan",
            "differs": "Oldin kiritilgan natijadan farq qiladi", "manual_exists": "Qo'lda kiritilgan natija bor",
            "unclear": "Ba'zi javoblar aniq o'qilmadi", "not_subject": "O'quvchi bu fanni tanlamagan"}
 
@@ -176,7 +176,8 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
     if not subject.omr_enabled:
         return ScanReply("error", f"{head}: bu fan uchun avtomatik tekshiruv o'chirilgan", tok.raw)
     if subject.is_locked or round_.is_locked:
-        return ScanReply("error", f"{head}: natijalar qulflangan", tok.raw)
+        return ScanReply("error", f"🔒 {head}: natijalar qulflangan — skaner yozmaydi. "
+                                  "Admin «Bosh sahifa → Natijalar kiritilishi»da «🔓 Ochish»ni bossin.", tok.raw)
     if tok.n != subject.question_total:
         return ScanReply("error", f"{head}: titulda {tok.n} ta savol, fanda esa {subject.question_total} ta. "
                                   "Titullarni qayta chop eting.", tok.raw)
@@ -259,7 +260,7 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
 # ---------------------------------------------------------------------------
 async def resolve(session: AsyncSession, scan: SheetScan, action: str, user: User,
                   answers: Optional[str] = None, target_code: str = "") -> str:
-    """action: accept — QR'dagi o'quvchiga; accept_marked — boshqa ID'dagi o'quvchiga; reject."""
+    """action: accept — titul kodidagi o'quvchiga; accept_marked — boshqa ID'dagi o'quvchiga; reject."""
     subject = await session.get(Subject, scan.subject_id)
     round_ = await session.get(Round, scan.round_id)
     if subject.is_locked or round_.is_locked:

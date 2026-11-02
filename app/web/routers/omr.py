@@ -28,6 +28,7 @@ from ..core import (Page, client_ip, current_user, flash, int_or_none, render,
 
 router = APIRouter(dependencies=[Depends(verify_csrf)])
 MAX_IMAGE = 12 * 1024 * 1024
+PRINT_DPI = 300
 _user_locks: dict[int, asyncio.Lock] = {}
 
 
@@ -44,7 +45,15 @@ async def scan_page(request: Request, user: User = Depends(current_user),
         subjects = [s for s in subjects if s.id in mine]
     today = (await session.execute(select(func.count()).select_from(SheetScan).where(
         SheetScan.scanned_by == user.username))).scalar_one()
-    return render(request, "omr/scan.html", {"subjects": subjects, "my_count": today})
+    # Har fan holati: hakam skaner ochiq-yopiqligini, kalit kiritilganini darhol ko'rsin
+    cur = await ranking.current_round(session)
+    status = []
+    for s in subjects:
+        keys = await osvc.keys_for(session, s.id, cur.id) if cur else {}
+        locked = s.is_locked or bool(cur and cur.is_locked)
+        status.append({"subject": s, "locked": locked, "nkeys": len(keys), "need": max(1, s.variants or 1)})
+    return render(request, "omr/scan.html", {"subjects": subjects, "status": status, "round": cur,
+                                             "my_count": today})
 
 
 @router.post("/scan/frame")
@@ -188,6 +197,27 @@ async def subject_toggle(sid: int, request: Request, user: User = Depends(requir
     return RedirectResponse("/admin/omr?tab=setup", 303)
 
 
+@router.get("/admin/omr/key/{sid}")
+async def key_page(sid: int, request: Request, user: User = Depends(require_admin),
+                   session: AsyncSession = Depends(get_session)):
+    """Kalitni kiritish sahifasi: har savol ro'parasida A B C D tugmalari (yoki matn bilan tez kiritish)."""
+    subject = await session.get(Subject, sid)
+    if subject is None:
+        raise HTTPException(404)
+    err = osvc.omr_ready(subject)
+    if err:
+        flash(request, f"{subject.name}: {err}", "error")
+        return RedirectResponse("/admin/omr", 303)
+    round_ = await _round(session, int_or_none(request.query_params.get("round_id")))
+    rows = (await session.execute(select(AnswerKey).where(AnswerKey.subject_id == sid,
+                                                          AnswerKey.round_id == round_.id))).scalars().all()
+    keys = {k.variant: k for k in rows}
+    scanned = (await session.execute(select(func.count()).select_from(SheetScan).where(
+        SheetScan.subject_id == sid, SheetScan.round_id == round_.id, SheetScan.status == "applied"))).scalar_one()
+    return render(request, "omr/key.html", {"subject": subject, "round": round_, "keys": keys,
+                                            "n": subject.question_total, "scanned": scanned})
+
+
 @router.post("/admin/omr/key/{sid}")
 async def save_key(sid: int, request: Request, user: User = Depends(require_admin),
                    session: AsyncSession = Depends(get_session)):
@@ -196,6 +226,8 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
         raise HTTPException(404)
     form = await request.form()
     round_ = await _round(session, int_or_none(form.get("round_id")))
+    back = (f"/admin/omr/key/{sid}?round_id={round_.id}" if form.get("from") == "key"
+            else f"/admin/omr?tab=setup&round_id={round_.id}#s{sid}")
     n = subject.question_total
     changed = []
     for v in range(subject.variants):
@@ -205,7 +237,7 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
         key, err = omr.clean_key(raw, n)
         if err:
             flash(request, f"{subject.name}, {omr.variant_letter(v)} variant: {err}", "error")
-            return RedirectResponse(f"/admin/omr?tab=setup&round_id={round_.id}#s{sid}", 303)
+            return RedirectResponse(back, 303)
         row = (await session.execute(select(AnswerKey).where(AnswerKey.subject_id == sid, AnswerKey.round_id == round_.id,
                                                              AnswerKey.variant == v))).scalars().first()
         if row is None:
@@ -226,7 +258,7 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
     if skipped:
         msg += f". {skipped} ta natija qo'lda o'zgartirilgani uchun tegilmadi"
     flash(request, msg)
-    return RedirectResponse(f"/admin/omr?tab=setup&round_id={round_.id}#s{sid}", 303)
+    return RedirectResponse(back, 303)
 
 
 @router.get("/admin/omr/sample/{sid}.png")
@@ -265,13 +297,14 @@ async def print_cards(request: Request, user: User = Depends(require_admin)):
             kind = items[0][1].kind
             per = omr.KINDS[kind][5]
             path = jobs.exports_dir() / f"titullar_{secrets.token_hex(4)}.pdf"
-            writer = JpegPdfWriter(path, 200, quality=92)
+            # 300 dpi, yo'qotishsiz: markerlar, kod kataklari va doirachalar printerda keskin chiqadi
+            writer = JpegPdfWriter(path, PRINT_DPI)
             try:
                 for i in range(0, len(items), per):
                     chunk = items[i:i + per]
-                    cards = [await asyncio.to_thread(omr.render_card, lay, info, 200) for info, lay in chunk]
-                    for page in await asyncio.to_thread(omr.compose_pages, cards, kind, 200):
-                        await asyncio.to_thread(writer.add, page)
+                    cards = [await asyncio.to_thread(omr.render_card, lay, info, PRINT_DPI) for info, lay in chunk]
+                    for page in await asyncio.to_thread(omr.compose_pages, cards, kind, PRINT_DPI):
+                        await asyncio.to_thread(writer.add_lossless_gray, page)
                     job.done += len(chunk)
             finally:
                 writer.close()
@@ -370,7 +403,7 @@ async def scan_resolve(scan_id: int, request: Request, user: User = Depends(requ
 @router.post("/admin/omr/review/accept-empty")
 async def accept_empty(request: Request, user: User = Depends(require_admin),
                        session: AsyncSession = Depends(get_session)):
-    """«ID belgilanmagan» ishlarni QR bo'yicha birdaniga tasdiqlash."""
+    """«ID belgilanmagan» ishlarni titul kodi bo'yicha birdaniga tasdiqlash."""
     form = await request.form()
     round_ = await _round(session, int_or_none(form.get("round_id")))
     items = (await session.execute(select(SheetScan).where(SheetScan.round_id == round_.id, SheetScan.status == "review",
@@ -382,7 +415,7 @@ async def accept_empty(request: Request, user: User = Depends(require_admin),
             ok += 1
         except ValueError:
             await session.rollback()
-    flash(request, f"{ok} ta ish QR bo'yicha tasdiqlandi")
+    flash(request, f"{ok} ta ish titul kodi bo'yicha tasdiqlandi")
     return RedirectResponse(f"/admin/omr?tab=review&round_id={round_.id}", 303)
 
 

@@ -18,7 +18,7 @@
       <div class="stat"><div class="v">{% if sc.correct is not none %}{{ sc.correct }} / {{ sc.answers|length }}{% else %}—{% endif %}</div>
         <div class="l">{% if sc.correct is not none %}{{ sc.score|num }} ball · {{ sc.percent|num }}%{% else %}Kalit kiritilmagan{% endif %}</div></div>
       <table class="small mt"><tbody>
-        <tr><td class="muted">QR egasi</td><td>ID {{ qr_p.code if qr_p else '?' }}{% if qr_p and qr_p.id != p.id %} (natija ID {{ p.code }} ga yozilgan){% endif %}</td></tr>
+        <tr><td class="muted">Titul egasi (kod)</td><td>ID {{ qr_p.code if qr_p else '?' }}{% if qr_p and qr_p.id != p.id %} (natija ID {{ p.code }} ga yozilgan){% endif %}</td></tr>
         <tr><td class="muted">O'quvchi belgilagan ID</td><td>{{ sc.id_marked.replace('_', '·') }}{% if marked_p %} — {{ marked_p.full_name }}{% endif %}</td></tr>
         {% if sc.reason %}<tr><td class="muted">Sabab</td><td>{{ reasons.get(sc.reason, sc.reason) }}</td></tr>{% endif %}
         <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>

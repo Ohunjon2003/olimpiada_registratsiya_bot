@@ -88,6 +88,27 @@ async def dashboard(request: Request, user: User = Depends(require_admin),
     })
 
 
+@router.post("/registration")
+async def registration_control(request: Request, user: User = Depends(require_admin),
+                               session: AsyncSession = Depends(get_session)):
+    """Ro'yxatdan o'tishni qo'lda to'xtatish / qayta ochish / vaqt bo'yicha rejimga qaytarish."""
+    form = await request.form()
+    action = str(form.get("action") or "")
+    modes = {"close": ("closed", "⏸ Ro'yxatdan o'tish to'xtatildi — bot yangi o'quvchilarni qabul qilmaydi."),
+             "open": ("open", "▶️ Ro'yxatdan o'tish ochildi — bot yana qabul qiladi (sanalardan qat'i nazar)."),
+             "auto": ("auto", "🕒 Ro'yxat holati endi «Umumiy sozlamalar»dagi sanalar bo'yicha.")}
+    if action not in modes:
+        raise HTTPException(400, "Noto'g'ri amal")
+    mode, msg = modes[action]
+    old = st.get("registration_mode")
+    await st.set_many(session, {"registration_mode": mode})
+    audit.log(session, user, "update", "settings", "registration_mode", f"Ro'yxat holati: {old} → {mode}",
+              old={"registration_mode": old}, new={"registration_mode": mode}, ip=client_ip(request))
+    await session.commit()
+    flash(request, msg)
+    return RedirectResponse(_safe_back(form.get("back"), "/admin"), 303)
+
+
 @router.get("/help")
 async def help_page(request: Request, user: User = Depends(require_admin)):
     """Admin uchun qadamma-qadam qo'llanma va tez-tez so'raladigan savollar."""
@@ -194,7 +215,7 @@ def _channel_errors() -> list[tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 @router.get("/settings")
 async def settings_page(request: Request, user: User = Depends(require_admin)):
-    return render(request, "admin/settings.html", {"defs": st.DEFAULTS})
+    return render(request, "admin/settings.html", {"defs": st.DEFAULTS, "reg_state": st.registration_state()})
 
 
 @router.post("/settings")
@@ -232,6 +253,11 @@ async def settings_save(request: Request, user: User = Depends(require_admin),
             flash(request, err, "error")
         return RedirectResponse("/admin/settings", 303)
     old = {k: st.get(k) for k in values}
+    # Sanalar o'zgartirilsa — qo'lda to'xtatish/ochish bekor bo'ladi, holat yana vaqt bo'yicha
+    if st.get("registration_mode") != "auto" and any(
+            values.get(k) != old.get(k) for k in ("registration_start", "registration_end")):
+        values["registration_mode"] = "auto"
+        flash(request, "Ro'yxat holati endi yangi sanalar bo'yicha (qo'lda to'xtatish bekor qilindi)", "info")
     await st.set_many(session, values)
     changed = {k: v for k, v in values.items() if old.get(k) != v}
     if changed:

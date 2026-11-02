@@ -48,6 +48,27 @@ class JpegPdfWriter:
             f"/Resources << /XObject << /Im0 {img_id} 0 R >> >> /Contents {content_id} 0 R >>".encode())
         self.page_ids.append(page_id)
 
+    def add_lossless_gray(self, img: Image.Image) -> None:
+        """Oq-qora sahifani siqilgan, lekin yo'qotishsiz (Flate) yozadi.
+
+        Titullar uchun: JPEG chegaralarni xiralashtiradi; bu esa markerlar, kod kataklari va
+        doirachalarni printerga aynan piksel-piksel uzatadi (oq fon juda yaxshi siqiladi).
+        """
+        import zlib
+        img = img.convert("L")
+        data = zlib.compress(img.tobytes(), 6)
+        w_pt, h_pt = img.width * 72 / self.dpi, img.height * 72 / self.dpi
+        img_id = self._obj(
+            f"<< /Type /XObject /Subtype /Image /Width {img.width} /Height {img.height} "
+            f"/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {len(data)} >>\nstream\n".encode()
+            + data + b"\nendstream")
+        content = f"q {w_pt:.3f} 0 0 {h_pt:.3f} 0 0 cm /Im0 Do Q".encode()
+        content_id = self._obj(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream")
+        page_id = self._obj(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w_pt:.3f} {h_pt:.3f}] "
+            f"/Resources << /XObject << /Im0 {img_id} 0 R >> >> /Contents {content_id} 0 R >>".encode())
+        self.page_ids.append(page_id)
+
     def close(self) -> None:
         kids = " ".join(f"{i} 0 R" for i in self.page_ids)
         self._obj_at(2, f"<< /Type /Pages /Kids [{kids}] /Count {len(self.page_ids)} >>".encode())

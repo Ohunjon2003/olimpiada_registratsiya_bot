@@ -46,6 +46,19 @@
   <h2>💡 Tez-tez so'raladigan savollar</h2>
   {% macro q(title) %}<details class="faq"><summary>{{ title }}</summary><div class="faq-body">{{ caller() }}</div></details>{% endmacro %}
 
+  {% call q("⏸ Ro'yxatdan o'tishni muddatidan oldin qanday to'xtataman?") %}
+    <p><b>Bosh sahifa</b> tepasidagi «📝 Ro'yxatdan o'tish» kartasida <b>⏸ Hozir to'xtatish</b> tugmasini bosing. Bot darhol yangi o'quvchilarni qabul qilmaydi (ro'yxatdan o'tganlar saqlanadi).</p>
+    <p>Qayta ochish — <b>▶️ Qayta ochish</b>. Sanalar bo'yicha avtomatik ishlashga qaytarish — <b>🕒 Sanalar bo'yicha</b>. «Umumiy sozlamalar»da sanalarni o'zgartirsangiz ham avtomatik rejimga qaytadi.</p>
+  {% endcall %}
+  {% call q("📋 Ro'yxat tugadi — natijalarni qanday kiritaman?") %}
+    <p>Natija kiritish ro'yxatga bog'liq emas — istalgan vaqtda ishlaydi. Ikki usul bor:</p>
+    <ol><li><b>✍️ Ball kiritish</b> — hakam (yoki admin) fanni tanlaydi, o'quvchi ID si ro'parasiga to'g'ri javoblar sonini yozib Enter bosadi. Ball va foiz o'zi hisoblanadi.</li>
+      <li><b>📷 Skaner</b> — fanda «Titul bilan avtomatik tekshirish» yoqilgan bo'lsa, titullarni telefon kamerasiga tutasiz; javoblar va ball o'zi yoziladi. Kalitni (to'g'ri javoblarni) avval ham, keyin ham kiritish mumkin.</li></ol>
+    <p>Yagona shart: fan yoki tur <b>🔒 qulflanmagan</b> bo'lsin.</p>
+  {% endcall %}
+  {% call q("📷 Skaner istalgan paytda ishlaydimi?") %}
+    <p>Ha. Skaner sahifasi tepasida har fan holati ko'rinadi: <b>✅ skaner ochiq</b>, <b>kalit hali yo'q</b> (ball kalit kiritilgach o'zi hisoblanadi) yoki <b>🔒 qulflangan</b> (skaner yozmaydi). Bir titulni ikki marta skaner qilsangiz ham natija ikki marta yozilmaydi.</p>
+  {% endcall %}
   {% call q("🔒 «Natijalar qulflangan» deyapti — ball kiritish qanday ochiladi?") %}
     <p>Qulf ikki xil: <b>fan qulfi</b> (bitta fan) va <b>tur qulfi</b> (butun tur, barcha fanlar). Qaysi biri yoqilgani «Ball kiritish» sahifasi tepasida yozilgan va o'sha yerda <b>«🔓 Ochish»</b> tugmasi bor.</p>
     <ol><li><b>Bosh sahifa</b> → «Natijalar kiritilishi» jadvali → kerakli fan qatoridagi <b>🔓 Ochish</b> tugmasi.</li>
@@ -60,7 +73,7 @@
     <p>Fan qulflanmagan bo'lsa — «Ball kiritish»da shu o'quvchini toping va to'g'ri qiymatni yozib «Saqlash»ni bosing. Qulflangan bo'lsa avval oching (yuqoriga qarang). Titul orqali kiritilgan bo'lsa: «📝 Titul va skaner → Ishlar» dan o'sha ishni oching va javoblarni tahrirlang.</p>
   {% endcall %}
   {% call q("Titul boshqa o'quvchiga berilib qolsa nima bo'ladi?") %}
-    <p>Tizim uch qavat himoyalaydi: titullar xona va o'rin tartibida chop etiladi; o'quvchi o'z <b>ID</b> sini belgilaydi; skaner QR dagi ID bilan solishtiradi. Mos kelmasa natija yozilmaydi va ish <b>🔎 Tekshirish kerak</b> ga tushadi — rasmni ko'rib, to'g'ri o'quvchiga yozasiz.</p>
+    <p>Tizim uch qavat himoyalaydi: titullar xona va o'rin tartibida chop etiladi; o'quvchi o'z <b>ID</b> sini belgilaydi; skaner titul kodidagi ID bilan solishtiradi. Mos kelmasa natija yozilmaydi va ish <b>🔎 Tekshirish kerak</b> ga tushadi — rasmni ko'rib, to'g'ri o'quvchiga yozasiz.</p>
   {% endcall %}
   {% call q("Telefonda skaner kamerani ochmayapti") %}
     <p>1) Sayt <b>https://</b> bilan ochilganini tekshiring (domen kerak). 2) Brauzer kameraga ruxsat so'raganda «Ruxsat berish»ni bosing (sozlamalar → sayt ruxsatlari). 3) Hozircha domen bo'lmasa — «📸 Suratga olish» tugmasi bilan har titulni alohida suratga oling.</p>

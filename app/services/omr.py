@@ -3,9 +3,11 @@
 Titul tuzilishi (barcha o'lchamlar mm da, bitta `Layout` dan — chop etish ham, o'qish ham shundan):
   * 4 burchakda ArUco marker: rasm qiyshiq/uzoqdan olinsa ham varaq aniq tekislanadi.
     Marker raqamlari titul turini ham bildiradi: Q (A4 ning 1/4) — 0..3, H (1/2) — 4..7, F (A4) — 8..11.
-  * QR kod: «O1.o'quvchi.fan.tur.variant.savollar.raqamlar.imzo». Imzo — HMAC (SECRET_KEY),
-    soxta yoki boshqa olimpiada tituli rad etiladi.
-  * ID doirachalari: o'quvchi o'z ID raqamini o'zi belgilaydi — QR bilan solishtiriladi
+  * Nuqta-kod (QR o'rnida, 9×8 katak, har biri 2.2 mm): o'quvchi, fan, tur, variant, savollar soni va
+    22 bitli imzo (HMAC, SECRET_KEY). QR'dan farqli — kataklar katta va tekislangan rasmdan doirachalar
+    kabi o'qiladi, shuning uchun 720p kamera va uzoqdan ham ishonchli. Imzo mos kelmasa (bitta katak
+    noto'g'ri o'qilsa ham) titul qabul qilinmaydi — tizim hech qachon boshqa o'quvchiga yozib yubormaydi.
+  * ID doirachalari: o'quvchi o'z ID raqamini o'zi belgilaydi — kod bilan solishtiriladi
     (titul boshqa o'quvchiga berilib yuborilgan bo'lsa — aniqlanadi).
   * Javob doirachalari: A, B, C, D.
 
@@ -65,6 +67,11 @@ class Layout:
     col_heads: list[float]                              # har ustunning chap cheti (sarlavha uchun)
     y0: float
 
+    @property
+    def code_cells(self) -> list[tuple[float, float]]:
+        """Nuqta-kod kataklarining markazlari (qatorma-qator, chapdan o'ngga), mm."""
+        return code_cells(self.qr)
+
 
 @lru_cache(maxsize=64)
 def layout(n: int, d: int = 4) -> Layout:
@@ -94,15 +101,83 @@ def layout(n: int, d: int = 4) -> Layout:
 
 
 # ---------------------------------------------------------------------------
-# QR token (imzolangan)
+# Nuqta-kod (imzolangan token)
 # ---------------------------------------------------------------------------
-def _sig(payload: str) -> str:
-    return hmac.new(config.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:10]
+CODE_COLS, CODE_ROWS, CODE_CELL = 9, 8, 2.2          # 72 katak, har biri 2.2 mm
+CODE_VERSION = 1
+# (maydon, bitlar soni) — jami 50 bit + 22 bit imzo = 72
+CODE_FIELDS = (("ver", 2), ("pid", 18), ("sid", 10), ("rid", 8), ("var", 2), ("n", 8), ("d", 2))
+SIG_BITS = CODE_COLS * CODE_ROWS - sum(b for _, b in CODE_FIELDS)
+LIMITS = {name: (1 << bits) - 1 for name, bits in CODE_FIELDS}
+
+
+def code_cells(box: tuple[float, float, float]) -> list[tuple[float, float]]:
+    """Kod qutisi (x, y, tomon) ichidagi kataklar markazlari."""
+    bx, by, bs = box
+    x0 = bx + (bs - CODE_COLS * CODE_CELL) / 2
+    y0 = by + (bs - CODE_ROWS * CODE_CELL) / 2
+    return [(x0 + (c + 0.5) * CODE_CELL, y0 + (r + 0.5) * CODE_CELL)
+            for r in range(CODE_ROWS) for c in range(CODE_COLS)]
+
+
+def _pack(pid: int, sid: int, rid: int, variant: int, n: int, d: int) -> int:
+    vals = {"ver": CODE_VERSION, "pid": pid, "sid": sid, "rid": rid, "var": variant, "n": n, "d": d - 4}
+    v = 0
+    for name, bits in CODE_FIELDS:
+        x = vals[name]
+        if not 0 <= x <= LIMITS[name]:
+            raise ValueError(f"Titul kodi uchun {name}={x} juda katta (chegara {LIMITS[name]})")
+        v = (v << bits) | x
+    return v
+
+
+def _unpack(v: int) -> dict[str, int]:
+    out = {}
+    for name, bits in reversed(CODE_FIELDS):
+        out[name] = v & ((1 << bits) - 1)
+        v >>= bits
+    return out
+
+
+def _sig_int(value: int) -> int:
+    h = hmac.new(config.SECRET_KEY.encode(), f"OMR{CODE_VERSION}:{value}".encode(), hashlib.sha256).digest()
+    return int.from_bytes(h[:4], "big") >> (32 - SIG_BITS)
 
 
 def make_token(pid: int, sid: int, rid: int, variant: int, n: int, d: int) -> str:
-    payload = f"O1.{pid}.{sid}.{rid}.{variant}.{n}.{d}"
-    return f"{payload}.{_sig(payload)}"
+    """Token matni (chop etishda nuqta-kodga aylanadi): «O2.o'quvchi.fan.tur.variant.savollar.raqamlar.imzo»."""
+    v = _pack(pid, sid, rid, variant, n, d)
+    return f"O2.{pid}.{sid}.{rid}.{variant}.{n}.{d}.{_sig_int(v):x}"
+
+
+def token_bits(raw: str) -> list[int]:
+    """Token → 72 bit (katta bitdan). Noto'g'ri matn (masalan, qo'llanmadagi namuna) — imzosiz «shovqin»."""
+    tok = parse_token(raw)
+    if tok is None:
+        h = int.from_bytes(hashlib.sha256(("x" + (raw or "")).encode()).digest(), "big")
+        return [(h >> i) & 1 for i in range(CODE_COLS * CODE_ROWS)]
+    v = (_pack(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d) << SIG_BITS) | _sig_int(
+        _pack(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d))
+    total = CODE_COLS * CODE_ROWS
+    return [(v >> (total - 1 - i)) & 1 for i in range(total)]
+
+
+def token_from_bits(bits: list[int]) -> Optional["Token"]:
+    """72 bit → Token (imzo tekshiriladi; mos kelmasa — None)."""
+    v = 0
+    for b in bits:
+        v = (v << 1) | (1 if b else 0)
+    value, sig = v >> SIG_BITS, v & ((1 << SIG_BITS) - 1)
+    if not hmac.compare_digest(_sig_int(value).to_bytes(4, "big"), sig.to_bytes(4, "big")):
+        return None
+    f = _unpack(value)
+    if f["ver"] != CODE_VERSION:
+        return None
+    tok = Token(f["pid"], f["sid"], f["rid"], f["var"], f["n"], f["d"] + 4, "")
+    if not (1 <= tok.n <= MAX_QUESTIONS and 4 <= tok.d <= 6):
+        return None
+    tok.raw = make_token(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d)
+    return tok
 
 
 @dataclass
@@ -117,18 +192,17 @@ class Token:
 
 
 def parse_token(raw: str) -> Optional[Token]:
-    """Imzo tekshiriladi: noto'g'ri bo'lsa None."""
+    """Token matnini tekshiradi (imzo bilan): noto'g'ri bo'lsa None."""
     parts = (raw or "").strip().split(".")
-    if len(parts) != 8 or parts[0] != "O1":
-        return None
-    payload, sig = ".".join(parts[:7]), parts[7]
-    if not hmac.compare_digest(_sig(payload), sig):
+    if len(parts) != 8 or parts[0] != "O2":
         return None
     try:
         pid, sid, rid, var, n, d = (int(x) for x in parts[1:7])
+        sig = int(parts[7], 16)
+        value = _pack(pid, sid, rid, var, n, d)
     except ValueError:
         return None
-    if not (1 <= n <= MAX_QUESTIONS and 0 <= var < 4 and 4 <= d <= 6):
+    if _sig_int(value) != sig or not (1 <= n <= MAX_QUESTIONS and 4 <= d <= 6):
         return None
     return Token(pid, sid, rid, var, n, d, raw.strip())
 
@@ -159,15 +233,6 @@ def _marker_img(mid: int, side_px: int) -> Image.Image:
     d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     m = cv2.aruco.generateImageMarker(d, mid, 6 * 20)
     return Image.fromarray(m).resize((side_px, side_px), Image.NEAREST)
-
-
-def _qr_img(text: str, side_px: int) -> Image.Image:
-    import cv2
-    q = cv2.QRCodeEncoder.create().encode(text)   # 1 piksel = 1 modul, chegarasiz
-    img = Image.fromarray(q)
-    if img.mode != "L":
-        img = img.convert("L")
-    return img.resize((side_px, side_px), Image.NEAREST)
 
 
 @dataclass
@@ -204,9 +269,17 @@ def render_card(lay: Layout, info: CardInfo, dpi: int = 200) -> Image.Image:
     side = round(MARKER * k)
     for mid, (cx, cy) in lay.markers.items():
         img.paste(_marker_img(mid, side), (round((cx - MARKER / 2) * k), round((cy - MARKER / 2) * k)))
-    # QR
+    # Nuqta-kod (QR o'rnida): 1 — qora katak, 0 — oq. Atrofida ingichka ramka
     qx, qy, qs = lay.qr
-    img.paste(_qr_img(info.token, round(qs * k)), (round(qx * k), round(qy * k)))
+    gap = 0.18
+    for bit, (cx, cy) in zip(token_bits(info.token), lay.code_cells):
+        if bit:
+            d.rectangle([P(cx - CODE_CELL / 2 + gap, cy - CODE_CELL / 2 + gap),
+                         P(cx + CODE_CELL / 2 - gap, cy + CODE_CELL / 2 - gap)], fill=0)
+    fx0 = qx + (qs - CODE_COLS * CODE_CELL) / 2 - 0.9
+    fy0 = qy + (qs - CODE_ROWS * CODE_CELL) / 2 - 0.9
+    d.rectangle([P(fx0, fy0), P(qx + qs - (fx0 - qx), qy + qs - (fy0 - qy))], outline=150, width=max(1, round(0.2 * k)))
+    text(qx + qs / 2, qy + qs - (fy0 - qy) + 0.5, "titul kodi — tegmang", 1.7, fill=130, anchor="ma")
     # Sarlavha
     top_w = lay.w - 2 * (MARGIN + MARKER) - 4
     text(lay.w / 2, MARGIN + 1.0, info.olympiad, 2.6, anchor="ma", fill=60, max_w=top_w)
@@ -310,36 +383,134 @@ def _aruco():
     return _detector
 
 
-def _decode_qr(gray) -> str:
+def _read_code(norm, span: float, cells: list[tuple[float, float]]):
+    """Nuqta-kodni o'qiydi. Qaytaradi: (Token yoki None, crisp).
+
+    crisp=True — kataklar aniq qora/oq edi (imzo mos kelmasa — bu boshqa olimpiada tituli).
+    Kichik siljishlarga chidamli: butun blok ±0.6 mm oralig'ida eng kontrastli holatga suriladi.
+    """
+    import numpy as np
+    h = max(1, int(CODE_CELL * PX * 0.25))
+    best = None
+    for dy in (0.0, -0.4, 0.4, -0.8, 0.8):
+        for dx in (0.0, -0.4, 0.4, -0.8, 0.8):
+            vals = []
+            for (x, y) in cells:
+                cx, cy = int(round((x + dx) * PX)), int(round((y + dy) * PX))
+                patch = norm[cy - h:cy + h + 1, cx - h:cx + h + 1]
+                vals.append((255.0 - float(patch.mean())) / span if patch.size else 0.0)
+            v = np.clip(np.array(vals), 0, 1)
+            score = float(np.abs(v - 0.5).mean())
+            if best is None or score > best[0]:
+                best = (score, v)
+            if score > 0.38:          # aniq — qolgan siljishlarni sinab o'tirmaymiz
+                break
+        if best[0] > 0.38:
+            break
+    v = best[1]
+    # 1) qat'iy chegara 0.5; 2) kataklar ikki guruhga ajralgan bo'lsa — ular o'rtasidagi chegara
+    thresholds = [0.5]
+    sv = np.sort(v)
+    gaps = np.diff(sv)
+    if len(gaps):
+        i = int(np.argmax(gaps))
+        if gaps[i] > 0.15:
+            thresholds.append(float((sv[i] + sv[i + 1]) / 2))
+    for t in thresholds:
+        tok = token_from_bits([1 if x >= t else 0 for x in v])
+        if tok is not None:
+            return tok, True
+    crisp = bool(np.min(np.abs(v - 0.5)) > 0.22)
+    return None, crisp
+
+
+def _find_markers(gray, small, det_scale: float):
+    """4 burchak markerini bir necha usulda qidiradi (oddiy → kontrast → kattalashtirish → to'liq o'lcham).
+
+    Qaytaradi: ({tur: {marker_id: (x, y)}}, bir xil marker 2 marta topildimi, umuman marker bormi).
+    Birinchi to'liq (4/4) natija olinishi bilan to'xtaydi — oddiy holatda faqat 1 urinish (tez).
+    """
     import cv2
-    q = cv2.QRCodeDetector()
-    try:
-        txt, pts, _ = q.detectAndDecode(gray)
-    except cv2.error:
-        txt = ""
-    return txt or ""
+    tries = [(small, det_scale)]
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    tries.append((clahe.apply(small), det_scale))
+    if max(small.shape) < 1400:                 # 720p va kichik kadr: kichik markerlar uchun kattalashtiramiz
+        up = cv2.resize(small, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
+        tries.append((up, det_scale * 1.6))
+    if det_scale < 1:                           # katta kadr: to'liq o'lchamda ham
+        tries.append((gray, 1.0))
+    sharp = cv2.addWeighted(small, 1.8, cv2.GaussianBlur(small, (0, 0), 2.0), -0.8, 0)
+    tries.append((sharp, det_scale))
+    best: dict[str, dict[int, tuple[float, float]]] = {}
+    any_marker = False
+    for n_try, (img, sc) in enumerate(tries):
+        if n_try >= 2 and not any_marker:
+            break                                   # 2 usulda ham bitta marker yo'q — kadrda titul yo'q
+        corners, ids, _ = _aruco().detectMarkers(img)
+        if ids is None or len(ids) == 0:
+            continue
+        any_marker = True
+        found: dict[str, dict[int, tuple[float, float]]] = {}
+        dup = False
+        for cs, mid in zip(corners, (int(i) for i in ids.flatten())):
+            for kind, (_, _, _, _, base, _) in KINDS.items():
+                if base <= mid < base + 4:
+                    c = cs.reshape(4, 2).mean(axis=0) / sc
+                    if mid in found.setdefault(kind, {}):
+                        dup = True
+                    found[kind][mid] = (float(c[0]), float(c[1]))
+        if dup:
+            return found, True, True
+        if any(len(v) == 4 for v in found.values()):
+            return found, False, True
+        # to'liq emas — eng ko'p topilganini eslab qolamiz va keyingi usulni sinaymiz
+        for kind, v in found.items():
+            if len(v) > len(best.get(kind, {})):
+                best[kind] = v
+    # 3 ta marker topilgan bo'lsa — 4-sining joyini hisoblab, o'sha joyni kattalashtirib qidiramiz
+    for kind, v in best.items():
+        if len(v) == 3:
+            got = _find_fourth(gray, kind, v)
+            if got:
+                v.update(got)
+                return best, False, True
+    return best, False, any_marker
 
 
-def _decode_qr_robust(crop) -> str:
-    """QR'ni bir necha usulda o'qishga urinish: soya va xiralikka chidamli."""
+def _find_fourth(gray, kind: str, have: dict[int, tuple[float, float]]) -> dict[int, tuple[float, float]]:
+    """3 ta ma'lum marker bo'yicha 4-sini taxminiy joyda (kattalashtirib, kontrastni oshirib) qidiradi."""
     import cv2
     import numpy as np
-    if crop is None or crop.size == 0:
-        return ""
-    bg = cv2.GaussianBlur(cv2.morphologyEx(crop, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8)), (0, 0), 9)
-    flat = np.clip(crop.astype(np.float32) / np.maximum(bg.astype(np.float32), 1) * 255, 0, 255).astype(np.uint8)
-    for img in (crop, flat):
-        for f in (1.5, 2.5, 1.0):
-            z = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC) if f != 1.0 else img
-            txt = _decode_qr(z)
-            if txt:
-                return txt
-            _, bw = cv2.threshold(z, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            bw = cv2.copyMakeBorder(bw, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=255)
-            txt = _decode_qr(bw)
-            if txt:
-                return txt
-    return ""
+    base = KINDS[kind][4]
+    mm = layout(1 if kind == "Q" else (41 if kind == "H" else 101), 4).markers
+    missing = [m for m in range(base, base + 4) if m not in have]
+    if len(missing) != 1:
+        return {}
+    known = sorted(have)
+    A = cv2.getAffineTransform(np.float32([mm[k] for k in known]), np.float32([have[k] for k in known]))
+    mx, my = mm[missing[0]]
+    px, py = A @ np.array([mx, my, 1.0])
+    scale = float(np.hypot(A[0, 0], A[1, 0]))          # piksel / mm
+    half = int(MARKER * scale * 1.6) + 8
+    x0, y0 = max(0, int(px) - half), max(0, int(py) - half)
+    crop = gray[y0:int(py) + half, x0:int(px) + half]
+    if crop.size == 0:
+        return {}
+    k = max(1.0, min(4.0, 70.0 / max(1.0, MARKER * scale)))   # marker ~70 px bo'lsin
+    big = cv2.resize(crop, None, fx=k, fy=k, interpolation=cv2.INTER_CUBIC)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+    for img in (big, clahe.apply(big)):
+        corners, ids, _ = _aruco().detectMarkers(img)
+        if ids is None:
+            continue
+        for cs, mid in zip(corners, (int(i) for i in ids.flatten())):
+            if mid == missing[0]:
+                c = cs.reshape(4, 2).mean(axis=0) / k
+                cx, cy = float(c[0] + x0), float(c[1] + y0)
+                # taxmin qilingan joydan juda uzoq bo'lsa — qabul qilmaymiz
+                if np.hypot(cx - px, cy - py) <= MARKER * scale * 1.2:
+                    return {mid: (cx, cy)}
+    return {}
 
 
 def read_image(data: bytes) -> ReadResult:
@@ -357,25 +528,9 @@ def read_image(data: bytes) -> ReadResult:
         gray = cv2.resize(gray, (int(gray.shape[1] * s), int(gray.shape[0] * s)), interpolation=cv2.INTER_AREA)
     det_scale = min(1.0, 1600 / max(gray.shape))
     small = cv2.resize(gray, None, fx=det_scale, fy=det_scale, interpolation=cv2.INTER_AREA) if det_scale < 1 else gray
-    corners, ids, _ = _aruco().detectMarkers(small)
-    if ids is None or len(ids) < 4:
-        # Soya/past kontrast: mahalliy kontrastni kuchaytirib qayta urinamiz
-        boosted = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(small)
-        c2, i2, _ = _aruco().detectMarkers(boosted)
-        if i2 is not None and (ids is None or len(i2) > len(ids)):
-            corners, ids = c2, i2
-    if ids is None or len(ids) == 0:
+    found, dup, any_marker = _find_markers(gray, small, det_scale)
+    if not any_marker:
         return ReadResult("nosheet", "Titul ko'rinmayapti")
-    ids = [int(i) for i in ids.flatten()]
-    found: dict[str, dict[int, tuple[float, float]]] = {}
-    dup = False
-    for cs, mid in zip(corners, ids):
-        for kind, (_, _, _, _, base, _) in KINDS.items():
-            if base <= mid < base + 4:
-                c = cs.reshape(4, 2).mean(axis=0) / det_scale
-                if mid in found.setdefault(kind, {}):
-                    dup = True
-                found[kind][mid] = (float(c[0]), float(c[1]))
     if dup:
         return ReadResult("partial", "Kadrda bir nechta titul bor — bittasini skaner qiling")
     full = [k for k, v in found.items() if len(v) == 4]
@@ -384,7 +539,7 @@ def read_image(data: bytes) -> ReadResult:
         return ReadResult("partial", f"Titulning {len(best)}/4 burchagi ko'rinyapti — butun titulni ramkaga joylang")
     kind = full[0]
     w, h, _, _, base, _ = KINDS[kind]
-    # QR orqali savollar soni va ID uzunligini bilamiz; avval tekislaymiz (Q/H/F o'lchami ma'lum)
+    # Savollar soni va ID uzunligi koddan bilinadi; avval tekislaymiz (Q/H/F o'lchami markerlardan ma'lum)
     tmp = layout(1 if kind == "Q" else (41 if kind == "H" else 101), 4)
     src = np.float32([found[kind][base + i] for i in range(4)])
     dst = np.float32([[x * PX, y * PX] for x, y in (tmp.markers[base + i] for i in range(4))])
@@ -395,39 +550,37 @@ def read_image(data: bytes) -> ReadResult:
     top_px = float(np.hypot(*(src[1] - src[0])))
     top_mm = tmp.markers[base + 1][0] - tmp.markers[base][0]
     if top_px / top_mm < 3.0:
-        return ReadResult("partial", "Titul juda uzoqda — yaqinroq olib keling")
-    # QR
-    qx, qy, qs = tmp.qr
-    pad = 3
-    crop = warped[int((qy - pad) * PX):int((qy + qs + pad) * PX), int((qx - pad) * PX):int((qx + qs + pad) * PX)]
-    raw = _decode_qr_robust(crop)
-    if not raw:
-        raw = _decode_qr(warped) or _decode_qr(small)
-    if not raw:
-        return ReadResult("partial", "QR kod o'qilmadi — yorug'roq joyda, to'g'riroq tuting")
-    tok = parse_token(raw)
-    if tok is None:
-        return ReadResult("error", "Bu titul shu olimpiadaga tegishli emas yoki QR buzilgan")
-    if kind_for(tok.n) != kind:
-        return ReadResult("error", "Titul turi QR bilan mos emas")
-    lay = layout(tok.n, tok.d)
-    # Xiralik
-    blur = cv2.Laplacian(warped[int(lay.y0 * PX):, :], cv2.CV_64F).var()
-    if blur < 25:
-        return ReadResult("partial", "Rasm xira — telefonni qimirlatmang, fokusni kuting", token=tok)
+        hint = " (katta titul — telefonni yotqizib, gorizontal tuting)" if kind != "Q" else ""
+        return ReadResult("partial", "Titul juda uzoqda — yaqinroq olib keling" + hint)
     # Yorug'likni tekislash: fon (qora belgilarsiz) bo'yicha
     bg = cv2.morphologyEx(warped, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41)))
     bg = cv2.GaussianBlur(bg, (0, 0), 15)
     norm = np.clip(warped.astype(np.float32) / np.maximum(bg.astype(np.float32), 1) * 255.0, 0, 255)
     # Siyoh (qora) darajasi: marker ichidagi eng qora piksellar
     mk = []
-    for (cx, cy) in lay.markers.values():
+    for (cx, cy) in tmp.markers.values():
         r0 = int(MARKER / 2 * PX * 0.9)
         patch = norm[int(cy * PX) - r0:int(cy * PX) + r0, int(cx * PX) - r0:int(cx * PX) + r0]
         if patch.size:
             mk.append(float(np.percentile(patch, 10)))
     ink = min(120.0, max(0.0, float(np.median(mk)) if mk else 40.0))
     span = max(255.0 - ink, 60.0)
+    # Nuqta-kod: kim, qaysi fan, qaysi tur (imzo bilan)
+    tok, crisp = _read_code(norm, span, tmp.code_cells)
+    if tok is None:
+        if crisp:
+            return ReadResult("error", "Bu titul shu olimpiadaga tegishli emas (kod imzosi mos emas)")
+        return ReadResult("partial", "Titul kodi o'qilmadi — yorug'roq joyda, to'g'riroq tuting")
+    if kind_for(tok.n) != kind:
+        return ReadResult("error", "Titul turi kod bilan mos emas")
+    lay = layout(tok.n, tok.d)
+    # Xiralik
+    # Kichik kadrdan (720p, uzoqdan) tekislangan rasm tabiiy ravishda «yumshoq» — chegarani masshtabga moslaymiz
+    px_mm = top_px / top_mm
+    blur_min = max(6.0, min(25.0, 25.0 * (px_mm / PX) ** 2))
+    blur = cv2.Laplacian(warped[int(lay.y0 * PX):, :], cv2.CV_64F).var()
+    if blur < blur_min:
+        return ReadResult("partial", "Rasm xira — telefonni qimirlatmang, fokusni kuting", token=tok)
     rin = R_MM * PX * 0.62
     ring_in, ring_out = R_MM * PX * 0.82, R_MM * PX * 1.15
     yy, xx = np.mgrid[-int(ring_out) - 1:int(ring_out) + 2, -int(ring_out) - 1:int(ring_out) + 2]

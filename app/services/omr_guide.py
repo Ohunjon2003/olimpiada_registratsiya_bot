@@ -109,7 +109,7 @@ def render_guide(olympiad: str = "Olimpiada", dpi: int = 200) -> Image.Image:
     qx, qy, qs = lay.qr
     badge(cx0 + 16.0, cy0 + 94.0, 1, ORANGE)                        # ID
     badge(cx0 + lay.col_heads[0] + 16.0, cy0 + lay.y0 - 11.0, 2, GREEN)   # javoblar
-    badge(cx0 + qx - 4.0, cy0 + qy + qs / 2, 3, RED)                # QR
+    badge(cx0 + qx - 4.0, cy0 + qy + qs / 2, 3, RED)                # titul kodi
     c = omr.MARGIN + omr.MARKER / 2
     badge(cx0 + c + 8.0, cy0 + lay.h - c - 9.0, 4, BLUE)             # markerlar
 
@@ -122,8 +122,8 @@ def render_guide(olympiad: str = "Olimpiada", dpi: int = 200) -> Image.Image:
         (GREEN, "Javoblarni belgilang",
          "Har savolga A, B, C yoki D dan faqat BITTA doirachani to'liq bo'yang. Ikkita belgilangan savol xato hisoblanadi. "
          "Bilmagan savolingizni bo'sh qoldiring."),
-        (RED, "QR kodga tegmang",
-         "QR kod sizning ishingizni aniqlaydi. Uni yopmang, chizmang, ustiga yozmang va titulni bukmang."),
+        (RED, "Titul kodiga tegmang",
+         "O'ng tepadagi qora kataklar (kod) ishingiz kimniki ekanini bildiradi. Ularni yopmang, chizmang va titulni bukmang."),
         (BLUE, "Burchaklardagi qora kvadratlar",
          "Ular telefon kamerasi titulni to'g'ri o'qishi uchun kerak. Ularni ifloslamang va qirqmang."),
     ]

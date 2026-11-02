@@ -542,7 +542,7 @@ class SheetScan(Base):
     __tablename__ = "sheet_scans"
     id: Mapped[int] = mapped_column(primary_key=True)
     participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id", ondelete="CASCADE"))
-    qr_participant_id: Mapped[int] = mapped_column(Integer)          # titul QR'idagi o'quvchi
+    qr_participant_id: Mapped[int] = mapped_column(Integer)          # titul kodidagi o'quvchi
     subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"))
     round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
     variant: Mapped[int] = mapped_column(Integer, default=0)

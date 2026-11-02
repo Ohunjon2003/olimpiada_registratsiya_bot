@@ -5,7 +5,13 @@
   .scan-wrap { max-width: 720px; margin: 0 auto; }
   .cam { position: relative; background: #0f172a; border-radius: 12px; overflow: hidden; aspect-ratio: 3 / 4; }
   .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .cam .frame { position: absolute; inset: 7% 12%; border: 3px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none; }
+  .cam .frame { position: absolute; inset: 7% 12%; border: 3px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none; transition: border-color .15s; }
+  .cam .frame.steady { border-style: solid; border-color: #facc15; }
+  .cam .frame.good { border-style: solid; border-color: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.35) inset; }
+  .subj-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+  .subj-status span { font-size: 12.5px; padding: 4px 10px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
+  .subj-status .on { border-color: #86efac; background: #f0fdf4; } .subj-status .off { border-color: #fecaca; background: #fef2f2; }
+  .cam-info { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
   .cam .hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: rgba(15,23,42,.65); color: #fff; font-size: 14px; text-align: center; }
   .cam .off { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #cbd5e1; text-align: center; padding: 20px; }
   .res { margin-top: 12px; border-radius: 12px; padding: 16px; font-size: 17px; font-weight: 600; line-height: 1.4; min-height: 64px; }
@@ -27,7 +33,14 @@
 <div class="scan-wrap">
   <div class="page-head"><div><h1>📷 Titul skaneri</h1>
     <div class="muted small">Titulni ramka ichiga to'liq joylang — tizim o'zi suratga oladi. Yashil — natija o'quvchiga yozildi.</div></div></div>
-  {% if not subjects %}<div class="alert warn">Sizga biriktirilgan fanlarda avtomatik tekshiruv yoqilmagan.</div>{% endif %}
+  {% if not subjects %}<div class="alert warn">Sizga biriktirilgan fanlarda avtomatik tekshiruv yoqilmagan.{% if user.is_admin %} <a href="/admin/omr">«📝 Titul va skaner»</a> da fanni yoqing.{% endif %}</div>{% endif %}
+  <div class="subj-status">
+    {% for it in status %}
+      {% if it.locked %}<span class="off">🔒 {{ it.subject.name }} — qulflangan (skaner yozmaydi)</span>
+      {% elif it.nkeys >= it.need %}<span class="on">✅ {{ it.subject.name }} — skaner ochiq, kalit bor</span>
+      {% else %}<span class="on">✅ {{ it.subject.name }} — skaner ochiq · <b>kalit hali yo'q</b> (ball keyin hisoblanadi)</span>{% endif %}
+    {% endfor %}
+  </div>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -45,7 +58,15 @@
   </div>
   <div class="cnt"><span>✅ <b id="c-ok">0</b></span><span>⚠️ <b id="c-warn">0</b></span><span>❌ <b id="c-err">0</b></span><span class="muted">Jami (siz): <b id="c-all">{{ my_count }}</b></span></div>
   <div class="hist card" id="hist"><div class="muted">Bu sessiyada hali skaner qilinmadi</div></div>
-  <p class="muted small mt">Fanlar: {% for s in subjects %}{{ s.name }}{{ ', ' if not loop.last }}{% else %}—{% endfor %}</p>
+  <div class="cam-info" id="cam-info"></div>
+  <details class="card mt small"><summary><b>Qanday skaner qilinadi?</b></summary>
+    <ol>
+      <li>Titulni stolga tekis qo'ying, yorug' joyda (soyasiz).</li>
+      <li>Telefonni titul ustida 20–30 sm balandlikda ushlang — <b>4 ta qora burchak</b> ramka ichida ko'rinsin.</li>
+      <li>Qimirlatmang: ramka <b style="color:#ca8a04">sariq</b> bo'lsa — o'qilmoqda, <b style="color:#16a34a">yashil</b> — natija yozildi.</li>
+      <li>Yashil xabardan keyin titulni oling va keyingisini qo'ying. Bir titulni ikki marta o'qisa ham natija ikki marta yozilmaydi.</li>
+      <li>Katta titul (A5/A4) bo'lsa — telefonni yotqizib (gorizontal) tuting.</li>
+    </ol></details>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -86,31 +107,51 @@
     beep(j.state === 'ok');
   }
   function send(blob, force, fromPhoto) {
-    busy = true;
+    busy = true; if (fromPhoto) lastSend = Date.now() + 2000;  // surat paytida video kadr yubormaymiz
     var fd = new FormData(); fd.append('image', blob, 'titul.jpg'); fd.append('csrf', CSRF);
     if (force) fd.append('force', '1');
     return fetch('/scan/frame', {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-CSRF-Token': CSRF}})
       .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('login'); } return r.json(); })
       .then(function (j) {
-        if (j.state === 'busy') return;
+        if (j.state === 'busy') { if (fromPhoto) setTimeout(function () { send(blob, force, true); }, 400); return; }  // surat yo'qolmasin
         if (j.state === 'nosheet') { sheetGone = true; if (fromPhoto) show({state: 'error', message: '❌ Rasmda titul topilmadi'}); else hint.textContent = 'Titulni ramka ichiga to\'liq joylang'; return; }
         if (j.state === 'partial') { if (fromPhoto) show({state: 'error', message: '❌ ' + j.message}); else hint.textContent = j.message; return; }
         // Natija: bir xil titul kadrda turibdi — qayta ko'rsatmaymiz (olib, qayta tutilsa — ko'rsatiladi)
         if (!fromPhoto && !force && j.token && j.token === lastToken && !sheetGone) return;
         lastToken = j.token || ''; sheetGone = false; lastBlob = blob;
         show(j);
+        frameEl.classList.toggle('good', j.state === 'ok');
+        setTimeout(function () { frameEl.classList.remove('good'); }, 1400);
         hint.textContent = j.state === 'ok' ? 'Keyingi titulni tuting' : 'Titulni olib, keyingisini tuting';
         paused = true; setTimeout(function () { paused = false; }, 1300);
       })
       .catch(function (e) { if (e.message !== 'login') hint.textContent = 'Aloqa xatosi — internetni tekshiring'; })
       .finally(function () { busy = false; });
   }
+  // --- Barqaror kadrni kutib yuborish (ZipGrade kabi): telefon qimirlamay turganda kadr olinadi ---
+  var tiny = document.createElement('canvas'), tctx = tiny.getContext('2d', {willReadFrequently: true});
+  var prev = null, steadyN = 0, lastSend = 0, frameEl = document.querySelector('.cam .frame');
+  function motion() {
+    var w = 64, h = Math.max(1, Math.round(64 * video.videoHeight / video.videoWidth));
+    tiny.width = w; tiny.height = h; tctx.drawImage(video, 0, 0, w, h);
+    var d = tctx.getImageData(0, 0, w, h).data, cur = new Uint8Array(w * h), sum = 0;
+    for (var i = 0, j = 0; i < d.length; i += 4, j++) cur[j] = (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10;
+    if (prev && prev.length === cur.length) { for (var k = 0; k < cur.length; k++) sum += Math.abs(cur[k] - prev[k]); sum /= cur.length; } else sum = 99;
+    prev = cur; return sum;
+  }
   function grab() {
     if (busy || paused || !video.videoWidth || document.hidden) return;
-    var w = video.videoWidth, h = video.videoHeight, k = Math.min(1, 1920 / Math.max(w, h));
-    canvas.width = Math.round(w * k); canvas.height = Math.round(h * k);
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(function (b) { if (b) send(b, false, false); }, 'image/jpeg', 0.85);
+    var m = motion(), now = Date.now();
+    steadyN = m < 5 ? steadyN + 1 : 0;
+    frameEl.classList.toggle('steady', steadyN >= 2);
+    // Qimirlamay turganda (2 ta ketma-ket tekshiruv) — darhol; qimirlab tursa ham 1.5 s da bir marta urinib ko'ramiz
+    if ((steadyN >= 2 && now - lastSend > 350) || now - lastSend > 1500) {
+      lastSend = now;
+      var w = video.videoWidth, h = video.videoHeight, sc = Math.min(1, 2560 / Math.max(w, h));
+      canvas.width = Math.round(w * sc); canvas.height = Math.round(h * sc);
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(function (b) { if (b) send(b, false, false); }, 'image/jpeg', 0.85);
+    }
   }
   function startCamera() {
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || !window.isSecureContext) {
@@ -118,17 +159,26 @@
       off.innerHTML = 'Jonli kamera faqat <b>&nbsp;HTTPS&nbsp;</b> (domen) orqali ishlaydi.<br><br>Hozircha pastdagi «📸 Suratga olish» tugmasidan foydalaning — har titulni bir marta suratga oling.';
       return;
     }
-    navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1920}, height: {ideal: 1080}}})
+    navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 2560}, height: {ideal: 1440}}})
       .then(function (stream) {
         video.srcObject = stream; video.play();
         track = stream.getVideoTracks()[0];
         var caps = track.getCapabilities ? track.getCapabilities() : {};
         if (caps.torch) document.getElementById('btn-torch').classList.remove('hidden');
+        // Doimiy avtofokus (qo'llab-quvvatlasa)
+        if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) track.applyConstraints({advanced: [{focusMode: 'continuous'}]}).catch(function () {});
+        video.addEventListener('loadedmetadata', function () {
+          var info = document.getElementById('cam-info');
+          info.textContent = 'Kamera: ' + video.videoWidth + '×' + video.videoHeight + (Math.min(video.videoWidth, video.videoHeight) < 720 ? ' — past sifat, titulni yaqinroq tuting' : '');
+        });
         hint.textContent = 'Titulni ramka ichiga joylang';
-        setInterval(grab, 650);
+        setInterval(grab, 150);
       })
       .catch(function (e) {
-        off.classList.remove('hidden'); off.textContent = 'Kameraga ruxsat berilmadi (' + e.name + '). Brauzer sozlamasida ruxsat bering yoki «📸 Suratga olish»dan foydalaning.';
+        var why = {NotAllowedError: 'Kameraga ruxsat berilmadi — brauzer sozlamasida (qulf belgisi → Kamera → Ruxsat) yoqing.',
+                   NotFoundError: 'Kamera topilmadi.', NotReadableError: 'Kamera boshqa ilovada band — uni yopib, sahifani yangilang.',
+                   OverconstrainedError: 'Kamera talab qilingan sozlamani qo\'llamadi.'}[e.name] || ('Kamerani ochib bo\'lmadi (' + e.name + ').');
+        off.classList.remove('hidden'); off.textContent = why + ' Hozircha «📸 Suratga olish» tugmasidan foydalaning.';
       });
   }
   document.getElementById('btn-again').addEventListener('click', function () { lastToken = ''; sheetGone = true; res.className = 'res idle'; res.textContent = 'Titulni tuting'; });

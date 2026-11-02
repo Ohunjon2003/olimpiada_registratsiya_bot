@@ -19,6 +19,8 @@ DEFAULTS: dict[str, tuple[str, Any, str]] = {
     "olympiad_name": ("str", "Fan olimpiadasi", "Olimpiada nomi"),
     "registration_start": ("datetime", None, "Ro'yxatdan o'tish boshlanishi"),
     "registration_end": ("datetime", None, "Ro'yxatdan o'tish tugashi"),
+    # auto — vaqt bo'yicha (yuqoridagi sanalar); closed — admin qo'lda to'xtatgan; open — qo'lda ochilgan
+    "registration_mode": ("str", "auto", "Ro'yxat holati: auto | open | closed"),
     "instagram_username_required": ("bool", False, "Instagram username so'ralsin"),
     "max_subjects": ("int", 0, "Bir o'quvchi tanlashi mumkin bo'lgan fanlar soni (0 — cheklanmagan)"),
     "allow_profile_edit": ("bool", True, "Ro'yxatdan o'tgandan keyin ma'lumotni o'zgartirish (muddat ichida)"),
@@ -107,7 +109,8 @@ TEXT_PAGE_KEYS = ("welcome_text", "welcome_text_cyr", "congrats_text", "congrats
                   "sticker_welcome", "sticker_congrats", "sticker_results",
                   "admin_chats", "notify_every", "notify_errors", "backup_to_telegram",
                   "appeals_enabled", "appeals_until", "seating_one_per_desk", "seating_group_by",
-                  "pass_notice", "passes_published", "pass_send_time", "omr_id_required", "omr_show_name")
+                  "pass_notice", "passes_published", "pass_send_time", "omr_id_required", "omr_show_name",
+                  "registration_mode")
 
 
 def raw(key: str) -> str:
@@ -140,7 +143,15 @@ async def set_many(session: AsyncSession, values: dict[str, Any]) -> None:
 
 
 def registration_state() -> str:
-    """'open' | 'not_started' | 'closed' — ro'yxatdan o'tish holati."""
+    """'open' | 'not_started' | 'closed' — ro'yxatdan o'tish holati.
+
+    Admin «Hozir to'xtatish / ochish» tugmasini bosgan bo'lsa — sanalardan qat'i nazar shu holat.
+    """
+    mode = get("registration_mode")
+    if mode == "closed":
+        return "closed"
+    if mode == "open":
+        return "open"
     now = now_utc()
     start, end = get("registration_start"), get("registration_end")
     if start and now < start:

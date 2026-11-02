@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Kalit — {{ subject.name }}{% endblock %}
+{% block crumbs %}<a href="/admin/omr">Titul va skaner</a> / Kalit{% endblock %}
+{% block head %}<style>
+  .vtabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .vtabs button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-weight: 600; }
+  .vtabs button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .vtabs .cnt { font-weight: 400; font-size: 12px; opacity: .8; }
+  .kgrid { column-width: 240px; column-gap: 26px; column-rule: 1px dashed var(--line); }   /* 1, 2, 3… pastga, tituldagidek */
+  .krow { break-inside: avoid; margin-bottom: 4px; }
+  .krow { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 8px; outline: none; }
+  .krow:focus, .krow.cur { background: var(--brand-soft); }
+  .krow.empty .qn { color: var(--err); }
+  .qn { width: 34px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .opt { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #94a3b8; background: #fff; font: 700 15px var(--font); color: #475569; cursor: pointer; }
+  .opt:hover { border-color: var(--brand); }
+  .opt.on { background: #1e293b; border-color: #1e293b; color: #fff; }
+  .kbar { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 0; margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; z-index: 5; }
+  @media (max-width: 900px) {
+    .kbar { bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); flex-wrap: nowrap; gap: 6px; }
+    .kbar #kstat { flex: 1; min-width: 0; font-size: 12px; } .kbar #kstat .muted { display: none; }
+    .kbar .btn { padding: 9px 10px; } .kbar .t { display: none; }
+    .opt { width: 44px; height: 44px; } }
+  .ktext { font-family: ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+</style>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🔑 {{ subject.name }} — to'g'ri javoblar kaliti</h1>
+    <div class="muted">{{ n }} ta savol · {{ round.name }}{% if subject.variants > 1 %} · {{ subject.variants }} ta variant{% endif %}
+      {% if scanned %} · <b>{{ scanned }}</b> ta skanerlangan ish saqlangach qayta hisoblanadi{% endif %}</div></div>
+  <a class="btn" href="/admin/omr">← Orqaga</a>
+</div>
+
+<details class="alert info small" open id="khelp"><summary><b>ℹ️ Qanday kiritiladi</b></summary> har savol ro'parasidagi to'g'ri harfni bosing — keyingi savolga o'zi o'tadi.
+  Klaviaturada ham bo'ladi: <b>A B C D</b> (yoki <b>1 2 3 4</b>) — tanlash, <b>↑ ↓</b> — savollar bo'ylab yurish, <b>Backspace</b> — o'chirish.
+  Tayyor kalitingiz matn bo'lsa (masalan, <code>ABCDA BCDAB…</code>) — pastdagi «Matn bilan kiritish» maydoniga qo'ying.
+</details>
+<script>if (window.matchMedia('(max-width:700px)').matches) document.getElementById('khelp').removeAttribute('open');</script>
+
+<form method="post" action="/admin/omr/key/{{ subject.id }}" id="kform" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}"><input type="hidden" name="from" value="key">
+  {% if subject.variants > 1 %}
+  <div class="vtabs" id="vtabs">
+    {% for v in range(subject.variants) %}<button type="button" data-v="{{ v }}" class="{{ 'on' if loop.first }}">{{ 'ABCD'[v] }} variant <span class="cnt" id="cnt{{ v }}"></span></button>{% endfor %}
+  </div>
+  {% endif %}
+  {% for v in range(subject.variants) %}{% set k = keys.get(v) %}
+  <input type="hidden" name="key_{{ v }}" id="key{{ v }}" value="{{ k.answers if k else '' }}">
+  {% endfor %}
+  <div class="kgrid" id="kgrid"></div>
+  <details class="mt" id="tbox"><summary class="small"><b>⌨️ Matn bilan kiritish</b> (tayyor kalitni nusxalab qo'yish)</summary>
+    <div class="field mt-s"><textarea id="ktext" class="ktext" rows="2" spellcheck="false" placeholder="ABCDABCD… — bo'sh joy, vergul va raqamlar e'tiborga olinmaydi"></textarea>
+      <div class="help">Yozganingiz darhol yuqoridagi doirachalarga o'tadi. Kirill А, В, С ham qabul qilinadi.</div></div>
+  </details>
+  <div class="kbar">
+    <span id="kstat" class="small"></span>
+    <button class="btn primary" id="ksave">💾 Saqlash<span class="t"> va hisoblash</span></button>
+    <button class="btn" type="button" id="kclear" title="Shu variantni tozalash">🧹<span class="t"> Tozalash</span></button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  var N = {{ n }}, V = {{ subject.variants }}, OPT = 'ABCD', cur = 0, active = 0;
+  var grid = document.getElementById('kgrid'), text = document.getElementById('ktext'), stat = document.getElementById('kstat');
+  // Har variant uchun javoblar massivi ('' — kiritilmagan)
+  var data = [], saved = [];
+  for (var v = 0; v < V; v++) {
+    var s = (document.getElementById('key' + v).value || '').toUpperCase();
+    data.push(Array.from({length: N}, function (_, i) { return OPT.indexOf(s[i]) >= 0 ? s[i] : ''; }));
+    saved.push(!!s);
+  }
+  // Qatorlarni chizamiz: «1  (A)(B)(C)(D)»
+  for (var i = 0; i < N; i++) {
+    var row = document.createElement('div'); row.className = 'krow'; row.tabIndex = 0; row.dataset.i = i;
+    row.innerHTML = '<span class="qn">' + (i + 1) + '.</span>' + OPT.split('').map(function (o) {
+      return '<button type="button" class="opt" data-o="' + o + '">' + o + '</button>'; }).join('');
+    grid.appendChild(row);
+  }
+  var rows = grid.children;
+  function render() {
+    var a = data[active], filled = 0;
+    for (var i = 0; i < N; i++) {
+      var r = rows[i]; r.classList.toggle('empty', !a[i]); r.classList.toggle('cur', i === cur);
+      Array.prototype.forEach.call(r.querySelectorAll('.opt'), function (b) { b.classList.toggle('on', b.dataset.o === a[i]); });
+      if (a[i]) filled++;
+    }
+    if (document.activeElement !== text) text.value = a.map(function (x) { return x || '_'; }).join('').replace(/_+$/, '');
+    for (var v = 0; v < V; v++) {
+      document.getElementById('key' + v).value = data[v].every(Boolean) ? data[v].join('') : (data[v].some(Boolean) ? data[v].map(function (x) { return x || '?'; }).join('') : '');
+      var c = document.getElementById('cnt' + v);
+      if (c) c.textContent = '(' + data[v].filter(Boolean).length + '/' + N + ')';
+    }
+    var missing = []; a.forEach(function (x, i) { if (!x) missing.push(i + 1); });
+    stat.innerHTML = filled === N ? '<span class="badge ok">✅ ' + N + ' / ' + N + ' — tayyor</span>'
+      : '<span class="badge warn">' + filled + ' / ' + N + '</span> <span class="muted">qolgan: ' + missing.slice(0, 12).join(', ') + (missing.length > 12 ? '…' : '') + '</span>';
+  }
+  function setAns(i, o) { data[active][i] = o; if (o && i < N - 1) cur = i + 1; else cur = i; render(); rows[cur].focus({preventScroll: false}); }
+  grid.addEventListener('click', function (e) {
+    var b = e.target.closest('.opt'); if (!b) return;
+    var i = +b.closest('.krow').dataset.i;
+    setAns(i, data[active][i] === b.dataset.o ? '' : b.dataset.o);   // qayta bosish — bekor qilish
+  });
+  grid.addEventListener('focusin', function (e) { var r = e.target.closest('.krow'); if (r) { cur = +r.dataset.i; render(); } });
+  grid.addEventListener('keydown', function (e) {
+    var k = e.key.toUpperCase(), map = {'1': 'A', '2': 'B', '3': 'C', '4': 'D', 'А': 'A', 'В': 'B', 'С': 'C'};
+    if (OPT.indexOf(k) >= 0 || map[k]) { e.preventDefault(); setAns(cur, OPT.indexOf(k) >= 0 ? k : map[k]); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(N - 1, cur + 1); rows[cur].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); rows[cur].focus(); }
+    else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); data[active][cur] = ''; if (e.key === 'Backspace' && cur > 0) cur--; render(); rows[cur].focus(); }
+  });
+  text.addEventListener('input', function () {
+    var s = text.value.toUpperCase().replace(/А/g, 'A').replace(/В/g, 'B').replace(/С/g, 'C').replace(/[\s,.;:)\-|0-9]/g, '');
+    for (var i = 0; i < N; i++) data[active][i] = OPT.indexOf(s[i]) >= 0 ? s[i] : '';
+    render();
+  });
+  document.getElementById('kclear').addEventListener('click', function () {
+    if (!confirm('Shu variant kalitini tozalaymi?')) return;
+    data[active] = data[active].map(function () { return ''; }); cur = 0; render();
+  });
+  var tabs = document.getElementById('vtabs');
+  if (tabs) tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-v]'); if (!b) return;
+    active = +b.dataset.v; cur = 0;
+    Array.prototype.forEach.call(tabs.children, function (x) { x.classList.toggle('on', x === b); });
+    text.value = ''; render();
+  });
+  document.getElementById('kform').addEventListener('submit', function (e) {
+    for (var v = 0; v < V; v++) {
+      var a = data[v], f = a.filter(Boolean).length;
+      if (f === 0 && saved[v]) {
+        e.preventDefault();
+        alert((V > 1 ? 'ABCD'[v] + ' variant: ' : '') + 'saqlangan kalitni bo\'sh qoldirib bo\'lmaydi — to\'g\'ri javoblarni belgilang.');
+        return;
+      }
+      if (f > 0 && f < N) {
+        e.preventDefault();
+        alert((V > 1 ? 'ABCD'[v] + ' variant: ' : '') + 'kalit to\'liq emas — ' + (N - f) + ' ta savolga javob belgilanmagan (qizil raqamlar).');
+        return;
+      }
+    }
+  });
+  render();
+})();
+</script>
+{% endblock %}
