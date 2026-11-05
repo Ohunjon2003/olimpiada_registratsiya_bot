@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/static/icons/favicon-32.png">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <title>{% block title %}{{ setting('olympiad_name') }}{% endblock %} — boshqaruv</title>
-  <link rel="stylesheet" href="/static/app.css?v=11">
+  <link rel="stylesheet" href="/static/app.css?v=13">
   <script src="/static/vendor/htmx.min.js"></script>
   {% block head %}{% endblock %}
 </head>
@@ -79,6 +79,7 @@
       <button class="menu-btn" onclick="openMenu()" aria-label="Menyu">☰</button>
       <div class="app-title">🏆 {{ setting('olympiad_name') }}</div>
       <div class="crumbs muted small">{% block crumbs %}{% endblock %}</div>
+      {% if user.is_admin %}<div class="topsearch"><input type="search" placeholder="🔎 O'quvchini topish: ID yoki ism…" data-suggest="/admin/participants/suggest" aria-label="O'quvchini qidirish"></div>{% endif %}
       <button class="avatar-btn" type="button" onclick="openMenu()" aria-label="Profil va menyu">{{ (user.full_name or user.username)[:1]|upper }}</button>
       <div class="who" id="who">
         <span><b>{{ user.full_name or user.username }}</b> <span class="badge {{ 'blue' if user.is_admin else '' }}">{{ 'admin' if user.is_admin else 'hakam' }}</span></span>
@@ -132,6 +133,66 @@
     });
   }
   labelTables();
+  // --- Jonli qidiruv: filtr formasidagi qidiruv maydoniga yozgan sari natijalar (jadval) yangilanadi ---
+  function liveSearch() {
+    document.querySelectorAll('form.filters input[type=search][name=q]').forEach(function (inp) {
+      var form = inp.form; if (!form || inp.dataset.live || (form.method || '').toLowerCase() !== 'get') return;
+      inp.dataset.live = '1'; inp.setAttribute('autocomplete', 'off');
+      var timer = null, ctl = null, last = inp.value;
+      function go() {
+        if (inp.value === last) return; last = inp.value;
+        if (document.querySelector('tr.dirty')) { inp.title = 'Avval kiritilgan balllarni saqlang'; return; }  // saqlanmagan ball yo'qolmasin
+        var params = new URLSearchParams(new FormData(form)); params.delete('page');
+        var url = location.pathname + '?' + params.toString();
+        if (ctl) ctl.abort(); ctl = window.AbortController ? new AbortController() : null;
+        form.classList.add('loading');
+        fetch(url, {credentials: 'same-origin', signal: ctl ? ctl.signal : undefined}).then(function (r) { return r.text(); }).then(function (html) {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var nf = Array.prototype.find.call(doc.querySelectorAll('form.filters'), function (f) { return f.querySelector('input[name=q]'); });
+          if (!nf) { location.href = url; return; }
+          // Formadan keyingi hamma narsani (jadval, sahifalar) yangisiga almashtiramiz — forma va fokus joyida qoladi
+          var parent = form.parentNode, sib = form.nextSibling;
+          while (sib) { var nx = sib.nextSibling; parent.removeChild(sib); sib = nx; }
+          var ns = nf.nextSibling;
+          while (ns) { var n2 = ns.nextSibling; parent.appendChild(document.importNode(ns, true)); ns = n2; }
+          history.replaceState(null, '', url);
+          labelTables(); if (window.htmx) htmx.process(parent);
+        }).catch(function () {}).finally(function () { form.classList.remove('loading'); });
+      }
+      inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(go, 250); });
+    });
+  }
+  liveSearch();
+  // --- Tez topish: yozgan sari taxminiy o'quvchilar ro'yxati (ID, ism, maktab, sinf) ---
+  function suggestBox(inp) {
+    var box = document.createElement('div'); box.className = 'suggest hidden'; inp.parentNode.style.position = 'relative'; inp.parentNode.appendChild(box);
+    inp.setAttribute('autocomplete', 'off');
+    var timer = null, items = [], cur = -1, seq = 0;
+    function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
+    function draw() {
+      if (!inp.value.trim()) { box.classList.add('hidden'); return; }
+      box.innerHTML = items.length ? items.map(function (it, i) {
+        return '<a href="' + it.url + '" class="' + (i === cur ? 'on' : '') + '"><b>' + esc(it.code) + '</b> ' + esc(it.name) + '<span>' + esc(it.info) + '</span></a>';
+      }).join('') : '<div class="none">Topilmadi</div>';
+      box.classList.remove('hidden');
+    }
+    function load() {
+      var q = inp.value.trim(), my = ++seq;
+      if (!q) { items = []; draw(); return; }
+      fetch(inp.dataset.suggest + '?q=' + encodeURIComponent(q), {credentials: 'same-origin'}).then(function (r) { return r.json(); })
+        .then(function (j) { if (my !== seq) return; items = j; cur = j.length ? 0 : -1; draw(); }).catch(function () {});
+    }
+    inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(load, 150); });
+    inp.addEventListener('focus', function () { if (items.length) draw(); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(items.length - 1, cur + 1); draw(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); draw(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (items[cur]) location.href = items[cur].url; else if (inp.value.trim()) location.href = '/admin/participants?q=' + encodeURIComponent(inp.value.trim()); }
+      else if (e.key === 'Escape') box.classList.add('hidden');
+    });
+    document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== inp) box.classList.add('hidden'); });
+  }
+  document.querySelectorAll('input[data-suggest]').forEach(suggestBox);
   // Telefonda filtrlar yig'iladi: qidiruv doim ko'rinadi, qolganlari «Filtrlar» tugmasi ostida
   function foldFilters() {
     if (!window.matchMedia('(max-width:700px)').matches) return;

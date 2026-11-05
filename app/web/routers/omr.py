@@ -50,8 +50,10 @@ async def scan_page(request: Request, user: User = Depends(current_user),
     status = []
     for s in subjects:
         keys = await osvc.keys_for(session, s.id, cur.id) if cur else {}
+        grades = await osvc.subject_grades(session, s, cur) if cur else []
         locked = s.is_locked or bool(cur and cur.is_locked)
-        status.append({"subject": s, "locked": locked, "nkeys": len(keys), "need": max(1, s.variants or 1)})
+        missing = [g for g in grades if any((g.id, v) not in keys for v in range(max(1, s.variants or 1)))]
+        status.append({"subject": s, "locked": locked, "grades": grades, "missing": missing})
     return render(request, "omr/scan.html", {"subjects": subjects, "status": status, "round": cur,
                                              "my_count": today})
 
@@ -104,7 +106,8 @@ async def admin_page(request: Request, user: User = Depends(require_admin),
     subjects = (await session.execute(select(Subject).order_by(Subject.position, Subject.id))).scalars().all()
     keys = {}
     for k in (await session.execute(select(AnswerKey).where(AnswerKey.round_id == round_.id))).scalars():
-        keys[(k.subject_id, k.variant)] = k
+        keys[(k.subject_id, k.grade_id, k.variant)] = k
+    subj_grades = {s.id: await osvc.subject_grades(session, s, round_) for s in subjects}
     counts = {}
     for sid, status, n in (await session.execute(
             select(SheetScan.subject_id, SheetScan.status, func.count()).where(SheetScan.round_id == round_.id)
@@ -118,9 +121,12 @@ async def admin_page(request: Request, user: User = Depends(require_admin),
             participant_subjects.c.subject_id == s.id, ranking.eligible_condition(round_)))).scalar_one()
     review_n = sum(n for (sid, stt), n in counts.items() if stt == "review")
     ctx = {"tab": tab, "round": round_, "rounds": rounds, "subjects": subjects, "keys": keys, "counts": counts,
+           "subj_grades": subj_grades,
            "takers": takers, "review_n": review_n, "ready": {s.id: osvc.omr_ready(s) for s in subjects},
            "letters": omr.OPTIONS, "params": params, "reasons": osvc.REASONS, "statuses": osvc.STATUS}
     if tab == "print":
+        ctx["all_grades"] = (await session.execute(select(Grade).where(Grade.is_active == True)  # noqa: E712
+                                                   .order_by(Grade.position, Grade.name))).scalars().all()
         ctx["exam_sessions"] = (await session.execute(select(ExamSession).where(ExamSession.round_id == round_.id)
                                                       .order_by(ExamSession.day, ExamSession.start_time))).scalars().all()
     if tab == "review":
@@ -209,12 +215,27 @@ async def key_page(sid: int, request: Request, user: User = Depends(require_admi
         flash(request, f"{subject.name}: {err}", "error")
         return RedirectResponse("/admin/omr", 303)
     round_ = await _round(session, int_or_none(request.query_params.get("round_id")))
+    grades = await osvc.subject_grades(session, subject, round_)
+    if not grades:
+        flash(request, f"{subject.name}: bu fanni hali hech kim tanlamagan va fanga sinf biriktirilmagan", "error")
+        return RedirectResponse("/admin/omr", 303)
     rows = (await session.execute(select(AnswerKey).where(AnswerKey.subject_id == sid,
                                                           AnswerKey.round_id == round_.id))).scalars().all()
-    keys = {k.variant: k for k in rows}
+    all_keys = {(k.grade_id, k.variant): k for k in rows if k.answers}
+    gid = int_or_none(request.query_params.get("grade_id"))
+    grade = next((g for g in grades if g.id == gid), None)
+    if grade is None:   # birinchi kaliti to'liq bo'lmagan sinf (yoki birinchi sinf)
+        grade = next((g for g in grades if any((g.id, v) not in all_keys for v in range(subject.variants))), grades[0])
+    keys = {v: all_keys.get((grade.id, v)) for v in range(subject.variants)}
     scanned = (await session.execute(select(func.count()).select_from(SheetScan).where(
-        SheetScan.subject_id == sid, SheetScan.round_id == round_.id, SheetScan.status == "applied"))).scalar_one()
-    return render(request, "omr/key.html", {"subject": subject, "round": round_, "keys": keys,
+        SheetScan.subject_id == sid, SheetScan.round_id == round_.id, SheetScan.grade_id == grade.id,
+        SheetScan.status == "applied"))).scalar_one()
+    # Boshqa sinf kalitidan nusxa olish uchun (savollar bir xil bo'lsa)
+    copy_from = {f"{g.name}-sinf": [all_keys[(g.id, v)].answers if (g.id, v) in all_keys else "" for v in range(subject.variants)]
+                 for g in grades if g.id != grade.id and any((g.id, v) in all_keys for v in range(subject.variants))}
+    done = {g.id: all((g.id, v) in all_keys for v in range(subject.variants)) for g in grades}
+    return render(request, "omr/key.html", {"subject": subject, "round": round_, "keys": keys, "grades": grades,
+                                            "grade": grade, "done": done, "copy_from": copy_from,
                                             "n": subject.question_total, "scanned": scanned})
 
 
@@ -226,8 +247,12 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
         raise HTTPException(404)
     form = await request.form()
     round_ = await _round(session, int_or_none(form.get("round_id")))
-    back = (f"/admin/omr/key/{sid}?round_id={round_.id}" if form.get("from") == "key"
-            else f"/admin/omr?tab=setup&round_id={round_.id}#s{sid}")
+    grades = {g.id: g for g in await osvc.subject_grades(session, subject, round_)}
+    grade = grades.get(int_or_none(form.get("grade_id")) or 0)
+    if grade is None:
+        flash(request, f"{subject.name}: sinf tanlanmagan — kalit har sinfga alohida kiritiladi", "error")
+        return RedirectResponse(f"/admin/omr/key/{sid}?round_id={round_.id}", 303)
+    back = f"/admin/omr/key/{sid}?round_id={round_.id}&grade_id={grade.id}"
     n = subject.question_total
     changed = []
     for v in range(subject.variants):
@@ -238,21 +263,23 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
         if err:
             flash(request, f"{subject.name}, {omr.variant_letter(v)} variant: {err}", "error")
             return RedirectResponse(back, 303)
-        row = (await session.execute(select(AnswerKey).where(AnswerKey.subject_id == sid, AnswerKey.round_id == round_.id,
-                                                             AnswerKey.variant == v))).scalars().first()
+        row = (await session.execute(select(AnswerKey).where(
+            AnswerKey.subject_id == sid, AnswerKey.round_id == round_.id, AnswerKey.grade_id == grade.id,
+            AnswerKey.variant == v))).scalars().first()
         if row is None:
-            row = AnswerKey(subject_id=sid, round_id=round_.id, variant=v)
+            row = AnswerKey(subject_id=sid, round_id=round_.id, grade_id=grade.id, variant=v)
             session.add(row)
         if row.answers != key:
             changed.append(omr.variant_letter(v))
-            audit.log(session, user, "update", "answer_key", f"{sid}/{round_.id}/{v}",
-                      f"{subject.name}: {omr.variant_letter(v)} variant kaliti", old=row.answers or None, new=key,
-                      ip=client_ip(request))
+            audit.log(session, user, "update", "answer_key", f"{sid}/{round_.id}/{grade.id}/{v}",
+                      f"{subject.name}, {grade.name}-sinf: {omr.variant_letter(v)} variant kaliti",
+                      old=row.answers or None, new=key, ip=client_ip(request))
         row.answers, row.updated_by = key, user.username
     await session.flush()
     done, skipped = await osvc.regrade(session, subject, round_.id, user)
     await session.commit()
-    msg = f"{subject.name}: kalit saqlandi" + (f" ({', '.join(changed)})" if changed else " (o'zgarish yo'q)")
+    msg = (f"{subject.name}, {grade.name}-sinf: kalit saqlandi"
+           + (f" ({', '.join(changed)})" if changed else " (o'zgarish yo'q)"))
     if done:
         msg += f". {done} ta ish qayta hisoblandi"
     if skipped:
@@ -269,7 +296,7 @@ async def sample(sid: int, user: User = Depends(require_admin), session: AsyncSe
     n = subject.question_total
     info = omr.CardInfo(omr.make_token(0, sid, 0, 0, n, 4), st.get("olympiad_name"), subject.name, "0017",
                         "101-xona · 14-o'rin", "B variant" if subject.variants > 1 else "",
-                        "Aliyev Aziz" if st.get("omr_show_name") else "")
+                        "Aliyev Aziz" if st.get("omr_show_name") else "", grade="7-sinf")
     img = await asyncio.to_thread(omr.render_card, omr.layout(n, 4), info, 150)
     buf = BytesIO()
     img.save(buf, "PNG")
@@ -280,6 +307,7 @@ async def sample(sid: int, user: User = Depends(require_admin), session: AsyncSe
 async def print_cards(request: Request, user: User = Depends(require_admin)):
     form = await request.form()
     sid, rid, ses = int_or_none(form.get("subject_id")), int_or_none(form.get("round_id")), int_or_none(form.get("session_id"))
+    gid, by_grade = int_or_none(form.get("grade_id")), form.get("order") == "grade"
     who, ip = SimpleNamespace(id=user.id, username=user.username), client_ip(request)
 
     async def worker(job: jobs.Job) -> None:
@@ -289,10 +317,10 @@ async def print_cards(request: Request, user: User = Depends(require_admin)):
                 job.error = "Fan tanlanmagan yoki avtomatik tekshiruv yoqilmagan"
                 return
             round_ = await _round(s, rid)
-            items = await osvc.cards(s, subject, round_, ses)
+            items = await osvc.cards(s, subject, round_, ses, grade_id=gid, by_grade=by_grade)
             job.total = len(items)
             if not items:
-                job.error = "Bu fanni tanlagan o'quvchi yo'q"
+                job.error = "Tanlangan shartlarga mos o'quvchi yo'q (fan / sinf / smena)"
                 return
             kind = items[0][1].kind
             per = omr.KINDS[kind][5]
@@ -308,7 +336,8 @@ async def print_cards(request: Request, user: User = Depends(require_admin)):
                     job.done += len(chunk)
             finally:
                 writer.close()
-            job.path, job.filename, job.media_type = path, f"titullar_{subject.name}.pdf", "application/pdf"
+            gname = next((f"_{info.grade}" for info, _ in items[:1] if gid), "")
+            job.path, job.filename, job.media_type = path, f"titullar_{subject.name}{gname}.pdf", "application/pdf"
             audit.log(s, who, "export", "omr", sid, f"{subject.name}: {len(items)} ta titul chop etishga", ip=ip)
             await s.commit()
 
@@ -349,7 +378,11 @@ async def scan_view(scan_id: int, request: Request, user: User = Depends(require
                     session: AsyncSession = Depends(get_session)):
     sc = await _scan(session, scan_id)
     keys = await osvc.keys_for(session, sc.subject_id, sc.round_id)
-    key = keys.get(sc.variant, "")
+    key = osvc.key_for(keys, sc.grade_id, sc.variant) or ""
+    subject = await session.get(Subject, sc.subject_id)
+    round_ = await session.get(Round, sc.round_id)
+    grades = await osvc.subject_grades(session, subject, round_)
+    titul_grade = await session.get(Grade, sc.grade_id) if sc.grade_id else None
     history = (await session.execute(select(SheetScan).where(
         or_(SheetScan.participant_id == sc.participant_id, SheetScan.qr_participant_id == sc.qr_participant_id),
         SheetScan.subject_id == sc.subject_id, SheetScan.round_id == sc.round_id).order_by(SheetScan.id))).scalars().all()
@@ -359,6 +392,7 @@ async def scan_view(scan_id: int, request: Request, user: User = Depends(require
     rows = [(i + 1, a, key[i] if i < len(key) else "") for i, a in enumerate(sc.answers)]
     return render(request, "omr/scan_view.html", {
         "sc": sc, "key": key, "rows": rows, "history": history, "qr_p": qr_p, "marked_p": marked_p,
+        "grades": grades, "titul_grade": titul_grade, "grade_keys": {g.id for g in grades if (g.id, sc.variant) in keys},
         "reasons": osvc.REASONS, "statuses": osvc.STATUS, "variant": omr.variant_letter(sc.variant)})
 
 
@@ -373,7 +407,7 @@ async def scan_image(scan_id: int, what: str, user: User = Depends(require_admin
         return FileResponse(p, media_type="image/jpeg")
     keys = await osvc.keys_for(session, sc.subject_id, sc.round_id)
     try:
-        img = await asyncio.to_thread(osvc.render_scan, sc, keys.get(sc.variant))
+        img = await asyncio.to_thread(osvc.render_scan, sc, osvc.key_for(keys, sc.grade_id, sc.variant))
     except FileNotFoundError:
         raise HTTPException(404, "Rasm topilmadi")
     buf = BytesIO()
@@ -391,7 +425,8 @@ async def scan_resolve(scan_id: int, request: Request, user: User = Depends(requ
         raise HTTPException(400)
     answers = str(form.get("answers")) if form.get("answers") is not None and str(form.get("answers")).strip() else None
     try:
-        msg = await osvc.resolve(session, sc, action, user, answers, str(form.get("code") or ""))
+        msg = await osvc.resolve(session, sc, action, user, answers, str(form.get("code") or ""),
+                                 int_or_none(form.get("grade_id")))
         flash(request, msg)
     except ValueError as e:
         await session.rollback()

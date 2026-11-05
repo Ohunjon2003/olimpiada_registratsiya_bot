@@ -105,7 +105,7 @@ async def send_sheets(bot, session, p: Participant, b: Broadcast) -> str:
     status = "skip"
     for sc in scans[:10]:
         keys = await osvc.keys_for(session, sc.subject_id, sc.round_id)
-        key = keys.get(sc.variant)
+        key = osvc.key_for(keys, sc.grade_id, sc.variant)
         try:
             img = await asyncio.to_thread(osvc.render_scan, sc, key)
         except FileNotFoundError:

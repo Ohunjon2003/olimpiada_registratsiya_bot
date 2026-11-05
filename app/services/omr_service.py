@@ -36,7 +36,8 @@ STATUS = {"applied": "Qabul qilingan", "review": "Tekshirish kerak", "rejected":
           "superseded": "Almashtirilgan"}
 REASONS = {"id_mismatch": "Titul kodi va o'quvchi belgilagan ID farq qiladi", "id_empty": "O'quvchi ID belgilamagan",
            "differs": "Oldin kiritilgan natijadan farq qiladi", "manual_exists": "Qo'lda kiritilgan natija bor",
-           "unclear": "Ba'zi javoblar aniq o'qilmadi", "not_subject": "O'quvchi bu fanni tanlamagan"}
+           "unclear": "Ba'zi javoblar aniq o'qilmadi", "not_subject": "O'quvchi bu fanni tanlamagan",
+           "grade_mismatch": "Titul boshqa sinf uchun chop etilgan"}
 
 
 def scan_dir() -> Path:
@@ -59,10 +60,31 @@ def code_digits(p: Participant, d: int) -> str:
 # ---------------------------------------------------------------------------
 # Kalitlar
 # ---------------------------------------------------------------------------
-async def keys_for(session: AsyncSession, subject_id: int, round_id: int) -> dict[int, str]:
+async def keys_for(session: AsyncSession, subject_id: int, round_id: int) -> dict[tuple[Optional[int], int], str]:
+    """{(sinf_id, variant): «ABCD…»} — kalit har sinfga alohida."""
     rows = (await session.execute(select(AnswerKey).where(AnswerKey.subject_id == subject_id,
                                                           AnswerKey.round_id == round_id))).scalars().all()
-    return {k.variant: k.answers for k in rows if k.answers}
+    return {(k.grade_id, k.variant): k.answers for k in rows if k.answers}
+
+
+def key_for(keys: dict, grade_id: Optional[int], variant: int) -> Optional[str]:
+    """Shu sinf va variant kaliti. Boshqa sinf kaliti hech qachon ishlatilmaydi (savollar har xil)."""
+    return keys.get((grade_id, variant))
+
+
+async def subject_grades(session: AsyncSession, subject: Subject, round_: Optional[Round] = None) -> list:
+    """Fan qaysi sinflarda yoziladi: fanga biriktirilgan sinflar + shu fanni tanlagan o'quvchilar sinflari."""
+    from ..models import Grade, participant_subjects
+    ids = {g.id for g in subject.grades}
+    q = (select(Participant.grade_id).join(participant_subjects, participant_subjects.c.participant_id == Participant.id)
+         .where(participant_subjects.c.subject_id == subject.id).distinct())
+    if round_ is not None:
+        q = q.where(ranking.eligible_condition(round_))
+    ids |= {g for (g,) in (await session.execute(q)).all() if g}
+    if not ids:
+        return []
+    rows = (await session.execute(select(Grade).where(Grade.id.in_(ids)))).scalars().all()
+    return sorted(rows, key=lambda g: (g.position, g.name))
 
 
 def omr_ready(subject: Subject) -> Optional[str]:
@@ -170,7 +192,7 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
     p = await session.get(Participant, tok.pid)
     if subject is None or round_ is None or p is None:
         return ScanReply("error", "Titul egasi, fani yoki turi bazada topilmadi", tok.raw)
-    head = f"ID {p.code} · {subject.name}"
+    head = f"ID {p.code} · {p.grade.name + '-sinf · ' if p.grade else ''}{subject.name}"
     if not user.is_admin and subject.id not in {s.id for s in user.subjects}:
         return ScanReply("error", f"{head}: bu fan sizga biriktirilmagan", tok.raw)
     if not subject.omr_enabled:
@@ -188,6 +210,8 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
 
     expected = code_digits(p, tok.d)
     marked = r.id_marked
+    # Titul qaysi sinf uchun: yangi titulda kodda yozilgan, eski titulda — o'quvchining sinfi
+    grade_id = tok.grade if tok.grade else p.grade_id
     reason = ""
     if marked == expected:
         pass
@@ -198,6 +222,8 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
         reason = "id_mismatch"
     if not reason and r.unclear:
         reason = "unclear"
+    if not reason and tok.grade and tok.grade != p.grade_id:
+        reason = "grade_mismatch"
     if not reason and subject.id not in {s.id for s in p.subjects}:
         reason = "not_subject"
 
@@ -224,12 +250,13 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
     stamp = f"{datetime.now(config.TZ):%Y%m%d_%H%M%S}_{p.id}_{subject.id}_{now_utc().microsecond}"
     w_name, raw_name = await asyncio.to_thread(_save_images, data, r.warped, stamp)
     scan = SheetScan(participant_id=p.id, qr_participant_id=p.id, subject_id=subject.id, round_id=round_.id,
-                     variant=tok.variant, answers=r.answers, id_marked=marked, image=w_name, raw_image=raw_name,
+                     variant=tok.variant, grade_id=grade_id, answers=r.answers, id_marked=marked,
+                     image=w_name, raw_image=raw_name,
                      scanned_by=user.username, status="review" if reason else "applied", reason=reason)
     session.add(scan)
     await session.flush()
     keys = await keys_for(session, subject.id, round_.id)
-    key = keys.get(tok.variant)
+    key = key_for(keys, grade_id, tok.variant)
     if reason:
         # Taxminiy ball (ko'rsatish uchun), natijaga yozilmaydi
         if key and len(key) == len(scan.answers):
@@ -244,7 +271,9 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
                "differs": f"⚠️ {head}: oldin kiritilgan natijadan farq qiladi — eski natija saqlandi, yangisi admin tasdig'ida.",
                "manual_exists": f"⚠️ {head}: bu o'quvchiga natija qo'lda kiritilgan — admin tasdiqlaydi.",
                "unclear": f"⚠️ {head}: aniq o'qilmagan javoblar bilan admin tekshiruviga yuborildi.",
-               "not_subject": f"⚠️ {head}: o'quvchi bu fanni tanlamagan — admin tekshiradi."}[reason]
+               "not_subject": f"⚠️ {head}: o'quvchi bu fanni tanlamagan — admin tekshiradi.",
+               "grade_mismatch": f"🛑 {head}: titul boshqa sinf uchun chop etilgan — titullar almashgan bo'lishi mumkin. "
+                                 "Natija yozilmadi, admin tekshiradi."}[reason]
         return ScanReply("review", msg, tok.raw, scan.id)
     wrote = await write_result(session, scan, subject, key, user.id)
     audit.log(session, user, "create", "scan", scan.id,
@@ -252,14 +281,15 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
     await session.commit()
     if wrote:
         return ScanReply("ok", f"✅ Tasdiqlandi: {head} — {scan.correct}/{tok.n} to'g'ri ({scan.percent:g}%)", tok.raw, scan.id)
-    return ScanReply("ok", f"✅ Qabul qilindi: {head}. Ball kalit kiritilgach avtomatik hisoblanadi.", tok.raw, scan.id)
+    return ScanReply("ok", f"✅ Qabul qilindi: {head}. Ball shu sinf kaliti kiritilgach avtomatik hisoblanadi.",
+                     tok.raw, scan.id)
 
 
 # ---------------------------------------------------------------------------
 # Admin qarorlari va qayta hisoblash
 # ---------------------------------------------------------------------------
 async def resolve(session: AsyncSession, scan: SheetScan, action: str, user: User,
-                  answers: Optional[str] = None, target_code: str = "") -> str:
+                  answers: Optional[str] = None, target_code: str = "", grade_id: Optional[int] = None) -> str:
     """action: accept — titul kodidagi o'quvchiga; accept_marked — boshqa ID'dagi o'quvchiga; reject."""
     subject = await session.get(Subject, scan.subject_id)
     round_ = await session.get(Round, scan.round_id)
@@ -271,6 +301,8 @@ async def resolve(session: AsyncSession, scan: SheetScan, action: str, user: Use
             raise ValueError(f"Javoblar {len(scan.answers)} ta bo'lishi va faqat A, B, C, D, «-» (bo'sh), "
                              "«*» (bir nechta) belgilaridan iborat bo'lishi kerak")
         scan.answers = a
+    if grade_id:
+        scan.grade_id = grade_id      # admin qaysi sinf kaliti bilan tekshirishni tanladi
     if action == "reject":
         scan.status, scan.decided_by, scan.decided_at = "rejected", user.username, now_utc()
         audit.log(session, user, "update", "scan", scan.id, "Skaner rad etildi")
@@ -294,7 +326,7 @@ async def resolve(session: AsyncSession, scan: SheetScan, action: str, user: Use
     scan.status, scan.decided_by, scan.decided_at = "applied", user.username, now_utc()
     await session.flush()
     keys = await keys_for(session, scan.subject_id, scan.round_id)
-    wrote = await write_result(session, scan, subject, keys.get(scan.variant), user.id)
+    wrote = await write_result(session, scan, subject, key_for(keys, scan.grade_id, scan.variant), user.id)
     p = await session.get(Participant, scan.participant_id)
     audit.log(session, user, "update", "scan", scan.id, f"Skaner tasdiqlandi → ID {p.code}"
               + (f": {scan.correct}/{len(scan.answers)}" if wrote else " (kalit yo'q)"))
@@ -310,7 +342,7 @@ async def regrade(session: AsyncSession, subject: Subject, round_id: int, user: 
                                                            SheetScan.round_id == round_id,
                                                            SheetScan.status.in_(("applied", "review"))))).scalars().all()
     for sc in scans:
-        key = keys.get(sc.variant)
+        key = key_for(keys, sc.grade_id, sc.variant)
         if sc.status == "review":   # taxminiy ballni yangilash
             if key and len(key) == len(sc.answers):
                 c, correct = compute_scan(subject, sc.answers, key)
@@ -333,7 +365,8 @@ async def regrade(session: AsyncSession, subject: Subject, round_id: int, user: 
 # ---------------------------------------------------------------------------
 # Titullar ro'yxati (chop etish)
 # ---------------------------------------------------------------------------
-async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_session_id: Optional[int] = None):
+async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_session_id: Optional[int] = None,
+                grade_id: Optional[int] = None, by_grade: bool = False):
     """[(CardInfo, Layout)] — joylashtirish bo'lsa smena/xona/o'rin tartibida, bo'lmasa maktab va familiya bo'yicha."""
     from . import seating
     n = subject.question_total
@@ -344,6 +377,8 @@ async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_ses
         select(SeatAssignment).where(SeatAssignment.round_id == round_.id))).scalars().all()}
     if exam_session_id:
         people = [p for p in people if seats.get(p.id) and seats[p.id].session_id == exam_session_id]
+    if grade_id:
+        people = [p for p in people if p.grade_id == grade_id]
 
     def order(p):
         """Joylanganlar — smena, xona, o'rin tartibida (xonaga tayyor dasta); qolganlar — maktab, familiya."""
@@ -352,7 +387,10 @@ async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_ses
             return (0, a.session.day.isoformat(), a.session.start_time, a.session_id, a.room.position, a.room_id,
                     a.row, a.desk, a.seat, "")
         return (1, "", "", 0, 0, 0, 0, 0, 0, (p.school.name if p.school else "") + p.last_name + p.first_name)
-    people.sort(key=order)
+    if by_grade:   # sinf → (xona/o'rin) — har sinf dastasi alohida
+        people.sort(key=lambda p: ((p.grade.position, p.grade.name) if p.grade else (0, ""), order(p)))
+    else:
+        people.sort(key=order)
     show_name = bool(st.get("omr_show_name"))
     olymp = st.get("olympiad_name")
     out = []
@@ -363,11 +401,12 @@ async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_ses
         place = ""
         if a:
             place = f"{seating.room_label(a.room)} · {seating.seat_number(a.room, (a.row, a.desk, a.seat))}-o'rin"
-        info = omr.CardInfo(token=omr.make_token(p.id, subject.id, round_.id, var, n, d), olympiad=olymp,
+        info = omr.CardInfo(token=omr.make_token(p.id, subject.id, round_.id, var, n, d, p.grade_id), olympiad=olymp,
                             subject=subject.name, code=code_digits(p, d), place=place,
                             variant=f"{omr.variant_letter(var)} variant" if subject.variants > 1 else "",
                             name=p.full_name if show_name else "",
-                            session=f"{a.session.name}" if a else "")
+                            session=f"{a.session.name}" if a else "",
+                            grade=f"{p.grade.name}-sinf" if p.grade else "")
         out.append((info, omr.layout(n, d)))
     return out
 

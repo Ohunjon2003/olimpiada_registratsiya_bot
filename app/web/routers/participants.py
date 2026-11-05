@@ -47,6 +47,41 @@ SORTS = {
 }
 
 
+@router.get("/suggest")
+async def suggest(request: Request, user: User = Depends(require_admin),
+                  session: AsyncSession = Depends(get_session)):
+    """Tez qidiruv (yozgan sari takliflar): ID, ism, familiya, telefon bo'yicha eng mos 8 ta o'quvchi.
+
+    Tartib: ID aniq mos → ism/familiya shu harflar bilan boshlanadi → qolgan mosliklar.
+    """
+    from fastapi.responses import JSONResponse
+    from ...utils import search_norm
+    q = (request.query_params.get("q") or "").strip()[:60]
+    if not q:
+        return JSONResponse([])
+    needle = search_norm(q)
+    cond = Participant.search_text.contains(needle, autoescape=True)
+    if q.isdigit():
+        cond = cond | Participant.code.startswith(q.zfill(4) if len(q) < 4 else q, autoescape=True)
+    rows = (await session.execute(select(Participant).where(cond).order_by(Participant.last_name, Participant.first_name)
+                                  .limit(60))).scalars().all()
+
+    def rank(p: Participant) -> tuple:
+        names = [search_norm(p.last_name), search_norm(p.first_name), search_norm(p.last_name + " " + p.first_name)]
+        if q.isdigit() and (p.code or "").lstrip("0") == q.lstrip("0"):
+            return (0, "")
+        if any(n.startswith(needle) for n in names):
+            return (1, names[2])
+        return (2, names[2])
+    rows.sort(key=rank)
+    out = [{"id": p.id, "code": p.code, "name": p.full_name,
+            "info": " · ".join(x for x in ((p.school.name if p.school else ""),
+                                           (f"{p.grade.name}-sinf" if p.grade else ""),
+                                           ("chetlatilgan" if p.status != "active" else "")) if x),
+            "url": f"/admin/participants/{p.id}"} for p in rows[:8]]
+    return JSONResponse(out)
+
+
 @router.get("")
 async def list_view(request: Request, user: User = Depends(require_admin),
                     session: AsyncSession = Depends(get_session)):

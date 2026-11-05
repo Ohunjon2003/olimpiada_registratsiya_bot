@@ -103,81 +103,41 @@ def layout(n: int, d: int = 4) -> Layout:
 # ---------------------------------------------------------------------------
 # Nuqta-kod (imzolangan token)
 # ---------------------------------------------------------------------------
-CODE_COLS, CODE_ROWS, CODE_CELL = 9, 8, 2.2          # 72 katak, har biri 2.2 mm
-CODE_VERSION = 1
-# (maydon, bitlar soni) — jami 50 bit + 22 bit imzo = 72
-CODE_FIELDS = (("ver", 2), ("pid", 18), ("sid", 10), ("rid", 8), ("var", 2), ("n", 8), ("d", 2))
-SIG_BITS = CODE_COLS * CODE_ROWS - sum(b for _, b in CODE_FIELDS)
-LIMITS = {name: (1 << bits) - 1 for name, bits in CODE_FIELDS}
+CODE_COLS, CODE_CELL = 9, 2.2                   # 9 ustun, katak 2.2 mm
 
 
-def code_cells(box: tuple[float, float, float]) -> list[tuple[float, float]]:
-    """Kod qutisi (x, y, tomon) ichidagi kataklar markazlari."""
+@dataclass(frozen=True)
+class CodeSpec:
+    """Titul kodi formati. v1 — 9×8 (sinfsiz, 2-noyabr versiyasi), v2 — 9×9 (sinf bilan)."""
+    version: int
+    rows: int
+    fields: tuple
+
+    @property
+    def cells(self) -> int:
+        return CODE_COLS * self.rows
+
+    @property
+    def sig_bits(self) -> int:
+        return self.cells - sum(b for _, b in self.fields)
+
+
+_BASE = (("ver", 2), ("pid", 18), ("sid", 10), ("rid", 8), ("var", 2), ("n", 8), ("d", 2))
+SPEC1 = CodeSpec(1, 8, _BASE)                       # 50 bit + 22 bit imzo
+SPEC2 = CodeSpec(2, 9, _BASE + (("grade", 8),))     # 58 bit + 23 bit imzo
+SPECS = {1: SPEC1, 2: SPEC2}
+CODE_SPEC = SPEC2                                   # yangi titullar shu formatda chop etiladi
+CODE_ROWS = CODE_SPEC.rows
+LIMITS = {name: (1 << bits) - 1 for name, bits in SPEC2.fields}
+
+
+def code_cells(box: tuple[float, float, float], rows: int = CODE_ROWS) -> list[tuple[float, float]]:
+    """Kod qutisi (x, y, tomon) ichidagi kataklar markazlari (qatorma-qator)."""
     bx, by, bs = box
     x0 = bx + (bs - CODE_COLS * CODE_CELL) / 2
-    y0 = by + (bs - CODE_ROWS * CODE_CELL) / 2
+    y0 = by + (bs - rows * CODE_CELL) / 2
     return [(x0 + (c + 0.5) * CODE_CELL, y0 + (r + 0.5) * CODE_CELL)
-            for r in range(CODE_ROWS) for c in range(CODE_COLS)]
-
-
-def _pack(pid: int, sid: int, rid: int, variant: int, n: int, d: int) -> int:
-    vals = {"ver": CODE_VERSION, "pid": pid, "sid": sid, "rid": rid, "var": variant, "n": n, "d": d - 4}
-    v = 0
-    for name, bits in CODE_FIELDS:
-        x = vals[name]
-        if not 0 <= x <= LIMITS[name]:
-            raise ValueError(f"Titul kodi uchun {name}={x} juda katta (chegara {LIMITS[name]})")
-        v = (v << bits) | x
-    return v
-
-
-def _unpack(v: int) -> dict[str, int]:
-    out = {}
-    for name, bits in reversed(CODE_FIELDS):
-        out[name] = v & ((1 << bits) - 1)
-        v >>= bits
-    return out
-
-
-def _sig_int(value: int) -> int:
-    h = hmac.new(config.SECRET_KEY.encode(), f"OMR{CODE_VERSION}:{value}".encode(), hashlib.sha256).digest()
-    return int.from_bytes(h[:4], "big") >> (32 - SIG_BITS)
-
-
-def make_token(pid: int, sid: int, rid: int, variant: int, n: int, d: int) -> str:
-    """Token matni (chop etishda nuqta-kodga aylanadi): «O2.o'quvchi.fan.tur.variant.savollar.raqamlar.imzo»."""
-    v = _pack(pid, sid, rid, variant, n, d)
-    return f"O2.{pid}.{sid}.{rid}.{variant}.{n}.{d}.{_sig_int(v):x}"
-
-
-def token_bits(raw: str) -> list[int]:
-    """Token → 72 bit (katta bitdan). Noto'g'ri matn (masalan, qo'llanmadagi namuna) — imzosiz «shovqin»."""
-    tok = parse_token(raw)
-    if tok is None:
-        h = int.from_bytes(hashlib.sha256(("x" + (raw or "")).encode()).digest(), "big")
-        return [(h >> i) & 1 for i in range(CODE_COLS * CODE_ROWS)]
-    v = (_pack(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d) << SIG_BITS) | _sig_int(
-        _pack(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d))
-    total = CODE_COLS * CODE_ROWS
-    return [(v >> (total - 1 - i)) & 1 for i in range(total)]
-
-
-def token_from_bits(bits: list[int]) -> Optional["Token"]:
-    """72 bit → Token (imzo tekshiriladi; mos kelmasa — None)."""
-    v = 0
-    for b in bits:
-        v = (v << 1) | (1 if b else 0)
-    value, sig = v >> SIG_BITS, v & ((1 << SIG_BITS) - 1)
-    if not hmac.compare_digest(_sig_int(value).to_bytes(4, "big"), sig.to_bytes(4, "big")):
-        return None
-    f = _unpack(value)
-    if f["ver"] != CODE_VERSION:
-        return None
-    tok = Token(f["pid"], f["sid"], f["rid"], f["var"], f["n"], f["d"] + 4, "")
-    if not (1 <= tok.n <= MAX_QUESTIONS and 4 <= tok.d <= 6):
-        return None
-    tok.raw = make_token(tok.pid, tok.sid, tok.rid, tok.variant, tok.n, tok.d)
-    return tok
+            for r in range(rows) for c in range(CODE_COLS)]
 
 
 @dataclass
@@ -189,22 +149,106 @@ class Token:
     n: int
     d: int
     raw: str
+    grade: Optional[int] = None     # titul qaysi sinf uchun chop etilgan (v1 titullarda yo'q)
+    version: int = 2
+
+
+def _vals(spec: CodeSpec, t: Token) -> dict[str, int]:
+    return {"ver": spec.version, "pid": t.pid, "sid": t.sid, "rid": t.rid, "var": t.variant, "n": t.n,
+            "d": t.d - 4, "grade": t.grade or 0}
+
+
+def _pack(spec: CodeSpec, t: Token) -> int:
+    vals, v = _vals(spec, t), 0
+    for name, bits in spec.fields:
+        x = vals[name]
+        if not 0 <= x <= (1 << bits) - 1:
+            raise ValueError(f"Titul kodi uchun {name}={x} juda katta (chegara {(1 << bits) - 1})")
+        v = (v << bits) | x
+    return v
+
+
+def _unpack(spec: CodeSpec, v: int) -> dict[str, int]:
+    out = {}
+    for name, bits in reversed(spec.fields):
+        out[name] = v & ((1 << bits) - 1)
+        v >>= bits
+    return out
+
+
+def _sig_int(spec: CodeSpec, value: int) -> int:
+    h = hmac.new(config.SECRET_KEY.encode(), f"OMR{spec.version}:{value}".encode(), hashlib.sha256).digest()
+    return int.from_bytes(h[:4], "big") >> (32 - spec.sig_bits)
+
+
+def _raw(t: Token) -> str:
+    spec = SPECS[t.version]
+    sig = _sig_int(spec, _pack(spec, t))
+    if t.version == 1:
+        return f"O2.{t.pid}.{t.sid}.{t.rid}.{t.variant}.{t.n}.{t.d}.{sig:x}"
+    return f"O3.{t.pid}.{t.sid}.{t.rid}.{t.variant}.{t.n}.{t.d}.{t.grade or 0}.{sig:x}"
+
+
+def make_token(pid: int, sid: int, rid: int, variant: int, n: int, d: int, grade: int = 0) -> str:
+    """Token matni (chop etishda titul kodiga aylanadi):
+    «O3.o'quvchi.fan.tur.variant.savollar.raqamlar.sinf.imzo» (sinf — Grade.id)."""
+    return _raw(Token(pid, sid, rid, variant, n, d, "", grade, 2))
+
+
+def token_bits(raw: str) -> list[int]:
+    """Token → bitlar (katta bitdan). Noto'g'ri matn (masalan, qo'llanmadagi namuna) — imzosiz «shovqin»."""
+    tok = parse_token(raw)
+    if tok is None:
+        h = int.from_bytes(hashlib.sha256(("x" + (raw or "")).encode()).digest(), "big")
+        return [(h >> i) & 1 for i in range(CODE_SPEC.cells)]
+    spec = SPECS[tok.version]
+    value = _pack(spec, tok)
+    v = (value << spec.sig_bits) | _sig_int(spec, value)
+    return [(v >> (spec.cells - 1 - i)) & 1 for i in range(spec.cells)]
+
+
+def token_from_bits(bits: list[int], spec: CodeSpec = CODE_SPEC) -> Optional[Token]:
+    """Bitlar → Token (imzo tekshiriladi; mos kelmasa — None)."""
+    if len(bits) != spec.cells:
+        return None
+    v = 0
+    for b in bits:
+        v = (v << 1) | (1 if b else 0)
+    value, sig = v >> spec.sig_bits, v & ((1 << spec.sig_bits) - 1)
+    if not hmac.compare_digest(_sig_int(spec, value).to_bytes(4, "big"), sig.to_bytes(4, "big")):
+        return None
+    f = _unpack(spec, value)
+    if f["ver"] != spec.version:
+        return None
+    tok = Token(f["pid"], f["sid"], f["rid"], f["var"], f["n"], f["d"] + 4, "",
+                f.get("grade") if spec.version >= 2 else None, spec.version)
+    if not (1 <= tok.n <= MAX_QUESTIONS and 4 <= tok.d <= 6):
+        return None
+    tok.raw = _raw(tok)
+    return tok
 
 
 def parse_token(raw: str) -> Optional[Token]:
-    """Token matnini tekshiradi (imzo bilan): noto'g'ri bo'lsa None."""
+    """Token matnini tekshiradi (imzo bilan): noto'g'ri bo'lsa None. «O2.» — v1, «O3.» — v2 (sinf bilan)."""
     parts = (raw or "").strip().split(".")
-    if len(parts) != 8 or parts[0] != "O2":
-        return None
     try:
-        pid, sid, rid, var, n, d = (int(x) for x in parts[1:7])
-        sig = int(parts[7], 16)
-        value = _pack(pid, sid, rid, var, n, d)
+        if len(parts) == 8 and parts[0] == "O2":
+            pid, sid, rid, var, n, d = (int(x) for x in parts[1:7])
+            tok = Token(pid, sid, rid, var, n, d, "", None, 1)
+        elif len(parts) == 9 and parts[0] == "O3":
+            pid, sid, rid, var, n, d, grade = (int(x) for x in parts[1:8])
+            tok = Token(pid, sid, rid, var, n, d, "", grade, 2)
+        else:
+            return None
+        sig = int(parts[-1], 16)
+        spec = SPECS[tok.version]
+        value = _pack(spec, tok)
     except ValueError:
         return None
-    if _sig_int(value) != sig or not (1 <= n <= MAX_QUESTIONS and 4 <= d <= 6):
+    if _sig_int(spec, value) != sig or not (1 <= tok.n <= MAX_QUESTIONS and 4 <= tok.d <= 6):
         return None
-    return Token(pid, sid, rid, var, n, d, raw.strip())
+    tok.raw = raw.strip()
+    return tok
 
 
 def variant_letter(v: int) -> str:
@@ -245,6 +289,7 @@ class CardInfo:
     variant: str = ""     # «B variant»
     name: str = ""        # ixtiyoriy
     session: str = ""
+    grade: str = ""       # «7-sinf» — titulda katta, qora fonda (titullar sinflar orasida aralashmasin)
 
 
 def render_card(lay: Layout, info: CardInfo, dpi: int = 200) -> Image.Image:
@@ -272,14 +317,16 @@ def render_card(lay: Layout, info: CardInfo, dpi: int = 200) -> Image.Image:
     # Nuqta-kod (QR o'rnida): 1 — qora katak, 0 — oq. Atrofida ingichka ramka
     qx, qy, qs = lay.qr
     gap = 0.18
-    for bit, (cx, cy) in zip(token_bits(info.token), lay.code_cells):
+    bits = token_bits(info.token)
+    rows = len(bits) // CODE_COLS
+    for bit, (cx, cy) in zip(bits, code_cells(lay.qr, rows)):
         if bit:
             d.rectangle([P(cx - CODE_CELL / 2 + gap, cy - CODE_CELL / 2 + gap),
                          P(cx + CODE_CELL / 2 - gap, cy + CODE_CELL / 2 - gap)], fill=0)
     fx0 = qx + (qs - CODE_COLS * CODE_CELL) / 2 - 0.9
-    fy0 = qy + (qs - CODE_ROWS * CODE_CELL) / 2 - 0.9
+    fy0 = qy + (qs - rows * CODE_CELL) / 2 - 0.8
     d.rectangle([P(fx0, fy0), P(qx + qs - (fx0 - qx), qy + qs - (fy0 - qy))], outline=150, width=max(1, round(0.2 * k)))
-    text(qx + qs / 2, qy + qs - (fy0 - qy) + 0.5, "titul kodi — tegmang", 1.7, fill=130, anchor="ma")
+    text(qx + qs / 2, qy + qs - (fy0 - qy) + 0.35, "titul kodi — tegmang", 1.4, fill=130, anchor="ma")
     # Sarlavha
     top_w = lay.w - 2 * (MARGIN + MARKER) - 4
     text(lay.w / 2, MARGIN + 1.0, info.olympiad, 2.6, anchor="ma", fill=60, max_w=top_w)
@@ -287,6 +334,14 @@ def render_card(lay: Layout, info: CardInfo, dpi: int = 200) -> Image.Image:
     tx, tw = 6.0, qx - 8.0
     text(tx, 15.0, info.subject + (f"  ·  {info.variant}" if info.variant else ""), 3.6, True, max_w=tw)
     text(tx, 20.5, f"ID {info.code}", 5.2, True)
+    if info.grade:
+        idw = d.textlength(f"ID {info.code}", font=_font(5.2 * k, True)) / k
+        gf = _font(4.2 * k, True)
+        gw = d.textlength(info.grade.upper(), font=gf) / k
+        gx = tx + idw + 3.5
+        if gx + gw + 3.0 <= qx - 2:
+            d.rounded_rectangle([P(gx, 20.0), P(gx + gw + 3.0, 26.6)], radius=1.2 * k, fill=0)
+            d.text(P(gx + 1.5 + gw / 2, 23.3), info.grade.upper(), font=gf, fill=255, anchor="mm")
     text(tx, 28.0, info.place or info.session, 3.1, max_w=tw)
     if info.name:
         text(tx, 32.5, info.name, 2.7, fill=40, max_w=tw)
@@ -383,7 +438,7 @@ def _aruco():
     return _detector
 
 
-def _read_code(norm, span: float, cells: list[tuple[float, float]]):
+def _read_code(norm, span: float, cells: list[tuple[float, float]], spec: "CodeSpec" = None):
     """Nuqta-kodni o'qiydi. Qaytaradi: (Token yoki None, crisp).
 
     crisp=True — kataklar aniq qora/oq edi (imzo mos kelmasa — bu boshqa olimpiada tituli).
@@ -417,7 +472,7 @@ def _read_code(norm, span: float, cells: list[tuple[float, float]]):
         if gaps[i] > 0.15:
             thresholds.append(float((sv[i] + sv[i + 1]) / 2))
     for t in thresholds:
-        tok = token_from_bits([1 if x >= t else 0 for x in v])
+        tok = token_from_bits([1 if x >= t else 0 for x in v], spec or CODE_SPEC)
         if tok is not None:
             return tok, True
     crisp = bool(np.min(np.abs(v - 0.5)) > 0.22)
@@ -566,7 +621,11 @@ def read_image(data: bytes) -> ReadResult:
     ink = min(120.0, max(0.0, float(np.median(mk)) if mk else 40.0))
     span = max(255.0 - ink, 60.0)
     # Nuqta-kod: kim, qaysi fan, qaysi tur (imzo bilan)
-    tok, crisp = _read_code(norm, span, tmp.code_cells)
+    # Avval yangi format (sinf bilan, 9×9), bo'lmasa — eski (9×8) titul
+    tok, crisp = _read_code(norm, span, code_cells(tmp.qr, SPEC2.rows), SPEC2)
+    if tok is None:
+        tok1, crisp1 = _read_code(norm, span, code_cells(tmp.qr, SPEC1.rows), SPEC1)
+        tok, crisp = (tok1, True) if tok1 else (None, crisp and crisp1)
     if tok is None:
         if crisp:
             return ReadResult("error", "Bu titul shu olimpiadaga tegishli emas (kod imzosi mos emas)")

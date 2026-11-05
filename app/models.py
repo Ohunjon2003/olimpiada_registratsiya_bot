@@ -519,17 +519,21 @@ class FsmRecord(Base):
 # Avtomatik tekshiruv: kalitlar va skanerlangan titullar
 # ---------------------------------------------------------------------------
 class AnswerKey(Base):
-    """To'g'ri javoblar: fan × tur × variant. answers — «ABCD...» (savollar soniga teng)."""
+    """To'g'ri javoblar: fan × tur × SINF × variant. answers — «ABCD...» (savollar soniga teng).
+
+    Har sinfning savollari har xil — shuning uchun kalit ham har sinfga alohida.
+    """
     __tablename__ = "answer_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
     subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"))
     round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    grade_id: Mapped[Optional[int]] = mapped_column(ForeignKey("grades.id", ondelete="CASCADE"), nullable=True)
     variant: Mapped[int] = mapped_column(Integer, default=0)  # 0 — A, 1 — B ...
     answers: Mapped[str] = mapped_column(Text, default="")
     updated_by: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    __table_args__ = (UniqueConstraint("subject_id", "round_id", "variant", name="uq_answer_key"),)
+    __table_args__ = (UniqueConstraint("subject_id", "round_id", "grade_id", "variant", name="uq_answer_key_grade"),)
 
 
 class SheetScan(Base):
@@ -546,6 +550,8 @@ class SheetScan(Base):
     subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"))
     round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
     variant: Mapped[int] = mapped_column(Integer, default=0)
+    # Titul qaysi sinf uchun chop etilgan (kalit shu sinfniki olinadi). Eski titullarda — o'quvchining sinfi
+    grade_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     answers: Mapped[str] = mapped_column(String(400), default="")
     id_marked: Mapped[str] = mapped_column(String(12), default="")   # o'quvchi o'zi belgilagan ID
     status: Mapped[str] = mapped_column(String(16), default="applied", index=True)

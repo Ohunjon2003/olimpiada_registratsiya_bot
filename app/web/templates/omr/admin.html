@@ -37,9 +37,10 @@
 <form method="post" action="/admin/omr/settings" class="card mb">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <h2>🛡 Titul almashib qolmasligi</h2>
-  <p class="muted small">Titulda imzolangan kod (o'ng tepadagi qora kataklar — titul egasi) va o'quvchi o'zi belgilaydigan ID doirachalari bor. Skanerda ikkalasi solishtiriladi:
-    mos kelmasa — natija yozilmaydi, «🔎 Tekshirish kerak»ga tushadi. Titullar xona va o'rin tartibida chop etiladi, titulda xona va o'rin raqami yoziladi —
-    nazoratchi ularni o'quvchilar kelguncha partalarga qo'yib chiqadi.</p>
+  <p class="muted small">Himoya 4 qavat: <b>1)</b> titulda imzolangan kod (o'ng tepadagi qora kataklar) — titul egasi, fani va <b>sinfi</b>;
+    <b>2)</b> o'quvchi o'zi belgilaydigan ID doirachalari — kod bilan solishtiriladi; <b>3)</b> titul sinfi o'quvchining sinfi bilan solishtiriladi;
+    <b>4)</b> titulda ID, <b>sinf (qora fonda)</b>, xona va o'rin yozilgan — nazoratchi xona/o'rin tartibida partalarga qo'yadi.
+    Biror narsa mos kelmasa — natija yozilmaydi, ish «🔎 Tekshirish kerak»ga tushadi.</p>
   <label class="check field"><input type="checkbox" name="omr_id_required" {% if setting('omr_id_required') %}checked{% endif %}> ID belgilamagan o'quvchining natijasi ham admin tasdig'iga tushsin <span class="muted">(tavsiya)</span></label>
   <label class="check field"><input type="checkbox" name="omr_show_name" {% if setting('omr_show_name') %}checked{% endif %}> Titulda o'quvchi ismi ham yozilsin <span class="muted">(o'chiq bo'lsa — hakam faqat ID ni ko'radi)</span></label>
   <div class="btns"><button class="btn">Saqlash</button></div>
@@ -65,13 +66,15 @@
   {% if s.variants > 1 %}<div class="help">Variant o'rin bo'yicha shaxmat tartibida beriladi — yonma-yon va old-orqadagilar turli variantda. Titulda «B variant» deb yoziladi.</div>{% endif %}
   {% if s.omr_enabled %}
   <div class="keybox mt-s">
-    {% for v in range(s.variants) %}{% set k = keys.get((s.id, v)) %}
-      <div>🔑 Kalit{% if s.variants > 1 %} ({{ 'ABCD'[v] }} variant){% endif %}:
-        {% if k and k.answers %}<span class="badge ok">kiritilgan</span> <code class="small">{{ k.answers[:20] }}{{ '…' if k.answers|length > 20 }}</code> <span class="muted small">{{ k.updated_by }}, {{ k.updated_at|dt }}</span>
-        {% else %}<span class="badge warn">hali kiritilmagan</span>{% endif %}</div>
-    {% endfor %}
-    <div class="btns mt-s"><a class="btn primary" href="/admin/omr/key/{{ s.id }}?round_id={{ round.id }}">🔑 Kalitni kiritish / tahrirlash</a></div>
-    <div class="help">Kalitni olimpiadadan keyin kiritish ham mumkin — oldin skanerlangan ishlar o'zi hisoblanadi. Kalit tuzatilsa — hamma ishlar qayta hisoblanadi.</div>
+    <div><b>🔑 Kalitlar — har sinfga alohida</b> <span class="muted small">(bosib shu sinf kalitini kiriting)</span></div>
+    <div class="grade-keys">
+    {% for g in subj_grades[s.id] %}
+      {% set ok = namespace(n=0) %}{% for v in range(s.variants) %}{% if keys.get((s.id, g.id, v)) %}{% set ok.n = ok.n + 1 %}{% endif %}{% endfor %}
+      <a href="/admin/omr/key/{{ s.id }}?round_id={{ round.id }}&grade_id={{ g.id }}" class="gk {{ 'ok' if ok.n == s.variants else ('part' if ok.n else 'no') }}">
+        {{ g.name }}-sinf {{ '✅' if ok.n == s.variants else ('◐' if ok.n else '— yo\'q') }}</a>
+    {% else %}<span class="muted small">Bu fanni hali hech kim tanlamagan</span>{% endfor %}
+    </div>
+    <div class="help">Kalitni olimpiadadan keyin kiritish ham mumkin — skanerlangan ishlar o'zi hisoblanadi. Har o'quvchining ishi faqat <b>o'z sinfi</b> kaliti bilan tekshiriladi.</div>
   </div>
   {% endif %}
   {% endif %}
@@ -90,6 +93,11 @@
         {% for s in subjects if s.omr_enabled %}<option value="{{ s.id }}">{{ s.name }} ({{ takers[s.id] }} ta)</option>{% else %}<option value="">— avval fanda avtomatik tekshiruvni yoqing —</option>{% endfor %}</select></div>
       <div class="field"><label>Smena</label><select name="session_id"><option value="">Hammasi</option>
         {% for e in exam_sessions %}<option value="{{ e.id }}">{{ e.name }} · {{ e.day.strftime('%d.%m') }} {{ e.start_time }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Sinf</label><select name="grade_id"><option value="">Barcha sinflar</option>
+        {% for g in all_grades %}<option value="{{ g.id }}">{{ g.name }}-sinf</option>{% endfor %}</select></div>
+      <div class="field"><label>Tartib</label><select name="order">
+        <option value="seat">Xona va o'rin bo'yicha (nazoratchiga xona dastasi)</option>
+        <option value="grade">Avval sinf, keyin xona va o'rin (har sinf dastasi alohida)</option></select></div>
       <div class="btns"><button class="btn primary">📄 PDF tayyorlash</button></div>
     </form>
     <div id="job"></div>
@@ -98,7 +106,8 @@
     <h2>📋 Yo'riqnoma</h2>
     <ul class="small">
       <li>40 tagacha savol — A4 varaqqa <b>4 ta</b> titul, 100 tagacha — 2 ta, undan ko'p — 1 ta. Punktir bo'yicha qirqing.</li>
-      <li>Titullar <b>smena → xona → o'rin</b> tartibida — har xona uchun tayyor dasta. Titulda xona va o'rin yozilgan.</li>
+      <li>Titullar <b>smena → xona → o'rin</b> tartibida — har xona uchun tayyor dasta. Titulda xona, o'rin va <b>sinf (qora fonda)</b> yozilgan.</li>
+      <li>Titul kodi ichida o'quvchi va <b>sinfi</b> bor: boshqa sinf titulini to'ldirgan ish natijaga yozilmaydi — admin tekshiruviga tushadi.</li>
       <li>Printerda <b>«Haqiqiy o'lcham / 100%»</b> ni tanlang, «Sahifaga moslash»ni o'chiring. Oq qog'oz, toza nusxa.</li>
       <li>O'quvchiga: ID raqamini kataklarga yozib, pastidagi doirachalarni bo'yasin (ID ruxsatnomasida). Doirachani to'liq bo'yasin.</li>
       <li>Titulni bukmaslik, ustiga yozmaslik kerak — burchakdagi qora kvadratlar va kod kataklari toza bo'lsin.</li>

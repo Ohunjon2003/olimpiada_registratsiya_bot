@@ -19,6 +19,9 @@
         <div class="l">{% if sc.correct is not none %}{{ sc.score|num }} ball · {{ sc.percent|num }}%{% else %}Kalit kiritilmagan{% endif %}</div></div>
       <table class="small mt"><tbody>
         <tr><td class="muted">Titul egasi (kod)</td><td>ID {{ qr_p.code if qr_p else '?' }}{% if qr_p and qr_p.id != p.id %} (natija ID {{ p.code }} ga yozilgan){% endif %}</td></tr>
+        <tr><td class="muted">Titul sinfi</td><td>{% if titul_grade %}<b>{{ titul_grade.name }}-sinf</b>{% else %}—{% endif %}
+          {% if titul_grade and p.grade_id != titul_grade.id %} <span class="badge err">o'quvchi {{ p.grade.name }}-sinfda!</span>{% endif %}
+          {% if not key %} <span class="badge warn">shu sinf kaliti yo'q</span>{% endif %}</td></tr>
         <tr><td class="muted">O'quvchi belgilagan ID</td><td>{{ sc.id_marked.replace('_', '·') }}{% if marked_p %} — {{ marked_p.full_name }}{% endif %}</td></tr>
         {% if sc.reason %}<tr><td class="muted">Sabab</td><td>{{ reasons.get(sc.reason, sc.reason) }}</td></tr>{% endif %}
         <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>
@@ -32,6 +35,9 @@
       <h3>Qaror</h3>
       <div class="field"><label>Javoblar (tahrirlash mumkin: A–D, «-» bo'sh, «*» bir nechta)</label>
         <input type="text" name="answers" value="{{ sc.answers }}" style="font-family:monospace"></div>
+      <div class="field"><label>Qaysi sinf kaliti bilan tekshirilsin</label><select name="grade_id" style="max-width:220px">
+        {% for g in grades %}<option value="{{ g.id }}" {% if g.id == sc.grade_id %}selected{% endif %}>{{ g.name }}-sinf{% if g.id not in grade_keys %} (kalit yo'q){% endif %}{% if titul_grade and g.id == titul_grade.id %} — titul sinfi{% endif %}</option>{% endfor %}</select>
+        <div class="help">Odatda — titul sinfi (o'quvchi shu sinf savollarini yechgan).</div></div>
       <div class="field"><label>Boshqa o'quvchiga yozish uchun ID</label><input type="text" name="code" value="{{ sc.id_marked if sc.id_marked.isdigit() else '' }}" style="max-width:120px"></div>
       <div class="btns">
         <button class="btn primary" name="action" value="accept">✅ ID {{ qr_p.code if qr_p else '' }} ga yozish</button>

@@ -48,7 +48,7 @@ def _sample_card(olympiad: str, dpi: int):
     """Bo'yalgan namunaviy titul (RGB) va uning joylashuvi (Layout)."""
     lay = omr.layout(len(SAMPLE_ANSWERS), 4)
     info = omr.CardInfo(token="NAMUNA", olympiad=olympiad, subject="Matematika", code=SAMPLE_ID,
-                        place="101-xona · 14-o'rin", variant="A variant")
+                        place="101-xona · 14-o'rin", variant="A variant", grade="7-sinf")
     img = omr.render_card(lay, info, dpi).convert("RGB")
     k = dpi / 25.4
     d = ImageDraw.Draw(img)
@@ -138,7 +138,7 @@ def render_guide(olympiad: str = "Olimpiada", dpi: int = 200) -> Image.Image:
     by0 = y + 0.5
     d.rounded_rectangle([rx * k, by0 * k, (rx + rw) * k, (by0 + 27.5) * k], radius=2.5 * k, fill=(255, 243, 224), outline=(245, 211, 167), width=max(2, round(0.4 * k)))
     T(rx + 3.2, by0 + 2.4, "Titul SIZNIKI ekanini tekshiring!", 4.0, True, (135, 68, 0))
-    para(rx + 3.2, by0 + 8.6, "Titulning tepasidagi ID, xona va o'rin raqami sizniki bo'lishi shart. "
+    para(rx + 3.2, by0 + 8.6, "Titulning tepasidagi ID, SINF, xona va o'rin sizniki bo'lishi shart. "
          "Boshqa o'quvchining tituli bo'lsa — to'ldirmasdan nazoratchiga ayting.", 3.3, rw - 6.4, (135, 68, 0))
 
     # --- Bo'yash misollari ---

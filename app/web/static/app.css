@@ -494,3 +494,26 @@ details.inline-edit[open] > form:first-of-type { min-width: 300px; }
 .omr-how summary { cursor: pointer; }
 .omr-how ol { margin: 10px 0 0; padding-left: 20px; line-height: 1.8; }
 .keybox { background: #f8f9fc; border-radius: 10px; padding: 10px 12px; line-height: 2; }
+.grade-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; line-height: 1.3; }
+.grade-keys .gk { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--line); background: #fff; font-weight: 600; font-size: 13px; color: var(--ink); }
+.grade-keys .gk.ok { border-color: #86efac; background: #f0fdf4; }
+.grade-keys .gk.part { border-color: #fde68a; background: #fffbeb; }
+.grade-keys .gk.no { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+.grade-keys .gk:hover { text-decoration: none; border-color: var(--brand); }
+
+/* Tez qidiruv (takliflar) va jonli qidiruv */
+.topsearch { flex: 1; max-width: 380px; margin: 0 16px; }
+.topsearch input, .dash-search input { width: 100%; }
+.suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid var(--line); border-radius: 10px;
+           box-shadow: 0 10px 30px rgba(16, 24, 40, .16); z-index: 70; overflow: hidden; max-height: 70vh; overflow-y: auto; }
+.suggest a { display: block; padding: 9px 12px; color: var(--ink); border-bottom: 1px solid var(--line); font-size: 14px; }
+.suggest a:last-child { border-bottom: 0; }
+.suggest a span { display: block; color: var(--muted); font-size: 12px; }
+.suggest a.on, .suggest a:hover { background: var(--brand-soft); text-decoration: none; }
+.suggest .none { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+.dash-search { padding: 10px; position: relative; }
+.dash-search > input { font-size: 16px; }
+form.filters.loading input[type=search] { background-image: linear-gradient(90deg, transparent, rgba(36,83,214,.08), transparent); background-size: 200% 100%; animation: ls 1s linear infinite; }
+@keyframes ls { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (max-width: 900px) { .topsearch { display: none; } }
+@media (min-width: 901px) { .dash-search { display: none; } }
