@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import config
 from ...db import get_session, session_scope
-from ...models import (Broadcast, Building, ExamSession, Participant, Room, Round,
+from ...models import (Broadcast, Building, ExamSession, Grade, Participant, Room, Round,
                        SeatAssignment, User)
 from ...security import verify_password
 from ...services import audit, export, jobs, ranking, seating
@@ -31,7 +31,7 @@ from ...utils import fmt_dt, now_utc
 from ..core import client_ip, flash, int_or_none, render, require_admin, verify_csrf
 
 router = APIRouter(prefix="/admin/seating", dependencies=[Depends(verify_csrf)])
-TABS = {"rooms": "🏫 Xonalar", "sessions": "🕘 Smenalar", "plan": "🪑 Taqsimot", "pass": "🎫 Ruxsatnoma",
+TABS = {"rooms": "🏫 Xonalar", "sessions": "🕘 Smenalar", "grades": "🎓 Sinflar bo'yicha", "plan": "🪑 Taqsimot", "pass": "🎫 Ruxsatnoma",
         "print": "🖨 Chop etish"}
 _TIME = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
@@ -116,6 +116,8 @@ async def page(request: Request, user: User = Depends(require_admin),
                                     .order_by(Broadcast.id.desc()).limit(10))).scalars().all()
     pass_tpl = await seating.pass_template(session)
     days = sorted({s.day for s in sessions})
+    grades = (await session.execute(select(Grade).order_by(Grade.position, Grade.id))).scalars().all()
+    overview = await seating.grade_overview(session, round_) if tab in ("grades", "plan") else []
     return render(request, "admin/seating.html", {
         "tab": tab, "tabs": TABS, "round": round_, "rounds": rounds, "buildings": buildings, "rooms": rooms,
         "sessions": sessions, "stats": stats, "one": one, "grid": grid, "per_session": per_session,
@@ -124,6 +126,8 @@ async def page(request: Request, user: User = Depends(require_admin),
                  for b in buildings},
         "passes": passes, "pass_tpl": pass_tpl, "days": days, "send_at": {d: seating.pass_send_at(d) for d in days},
         "loads": json.loads, "today": date.today(), "session_schools": session_schools,
+        "grades": grades, "overview": overview, "grade_label": seating.grade_label,
+        "scap": {s.id: seating.session_cap(s, stats["per_session"]) for s in sessions},
     })
 
 
@@ -425,6 +429,19 @@ async def session_save(request: Request, user: User = Depends(require_admin),
     s.start_time = _time(form.get("start_time"), "09:00")
     s.duration_min = _intv(form.get("duration_min"), 120, 10, 600)
     s.is_active = bool(form.get("is_active", "1"))
+    if "grade_id" in form:          # sinf va chegara (tahrirlash formasida bor)
+        gid = int_or_none(form.get("grade_id"))
+        new_gid = gid if gid and await session.get(Grade, gid) else None
+        if sid and new_gid != s.grade_id:
+            n = (await session.execute(select(func.count()).select_from(SeatAssignment)
+                                       .where(SeatAssignment.session_id == sid))).scalar_one()
+            if n:
+                flash(request, f"Smenada {n} ta o'quvchi joylangan — sinfini o'zgartirib bo'lmaydi. "
+                               "Avval taqsimotni bekor qiling.", "error")
+                return _back("sessions", round_.id)
+        s.grade_id = new_gid
+        lim = int_or_none(form.get("max_students"))
+        s.max_students = lim if lim and lim > 0 else None
     await session.flush()
     audit.log(session, user, "update" if sid else "create", "exam_session", s.id,
               f"{s.name}: {s.day} {s.start_time}", ip=client_ip(request))
@@ -468,7 +485,8 @@ async def sessions_generate(request: Request, user: User = Depends(require_admin
         flash(request, "Boshlanish sanasi va kamida bitta vaqt kiriting (masalan: 09:00, 13:00)", "error")
         return _back("sessions", round_.id)
     existing = (await session.execute(select(func.count()).select_from(ExamSession)
-                                      .where(ExamSession.round_id == round_.id))).scalar_one()
+                                      .where(ExamSession.round_id == round_.id,
+                                             ExamSession.grade_id.is_(None)))).scalar_one()
     pos = (await session.execute(select(func.max(ExamSession.position)))).scalar() or 0
     made, d = 0, day
     while made < count:
@@ -489,6 +507,156 @@ async def sessions_generate(request: Request, user: User = Depends(require_admin
     await session.commit()
     flash(request, f"{made} ta smena yaratildi")
     return _back("sessions", round_.id)
+
+
+# ---------------------------------------------------------------------------
+# Sinflar bo'yicha smenalar
+# ---------------------------------------------------------------------------
+def _session_times(day: date, times: list[str], count: int, skip_sunday: bool) -> list[tuple[date, str]]:
+    """Ketma-ket smena vaqtlari: birinchi kundan boshlab, kuniga berilgan soatlarda."""
+    out, d = [], day
+    while len(out) < count:
+        if skip_sunday and d.weekday() == 6:
+            d += timedelta(days=1)
+            continue
+        for t in sorted(times):
+            if len(out) < count:
+                out.append((d, t))
+        d += timedelta(days=1)
+    return out
+
+
+@router.post("/grade-sessions")
+async def grade_sessions_create(request: Request, user: User = Depends(require_admin),
+                                session: AsyncSession = Depends(get_session)):
+    """Sinf uchun smenalar: «1 smenaga nechta o'quvchi» → kerakli smenalar soni avtomatik.
+
+    Sinfda hali joy biriktirilmagan bo'lsa — eski smenalari o'chirilib, yangidan yaratiladi
+    (sonni o'zgartirish uchun shunchaki qayta yaratish kifoya).
+    """
+    form = await request.form()
+    round_ = await _round(session, int_or_none(form.get("round_id")))
+    grade = await session.get(Grade, int_or_none(form.get("grade_id")) or 0)
+    if grade is None:
+        flash(request, "Sinfni tanlang", "error")
+        return _back("grades", round_.id)
+    label = seating.grade_label(grade.name)
+    day = _parse_day(form.get("start_day"))
+    times = [t for t in (_time(x, "") for x in re.split(r"[,\s;]+", str(form.get("times") or "")) if x.strip()) if t]
+    if day is None or not times:
+        flash(request, "Birinchi kun va kamida bitta boshlanish vaqtini kiriting (masalan: 09:00, 13:00)", "error")
+        return _back("grades", round_.id, f"&g={grade.id}")
+    st_ = await seating.stats(session, round_)
+    per_room_total = st_["per_session"]
+    if not per_room_total:
+        flash(request, "Avval «🏫 Xonalar» bo'limida xonalarni kiriting", "error")
+        return _back("grades", round_.id)
+    per = _intv(form.get("per_shift"), per_room_total, 1, 100000)
+    if per > per_room_total:
+        flash(request, f"Bir smenada barcha xonalarga {per_room_total} ta o'quvchi sig'adi — "
+                       f"{per} emas, {per_room_total} tadan bo'lindi.", "error")
+        per = per_room_total
+    n = sum(1 for p in await seating.eligible_students(session, round_) if p.grade_id == grade.id)
+    if n == 0:
+        flash(request, f"{label}dan qatnashadigan o'quvchi yo'q", "error")
+        return _back("grades", round_.id)
+    old = (await session.execute(select(ExamSession).where(ExamSession.round_id == round_.id,
+                                                           ExamSession.grade_id == grade.id))).scalars().all()
+    if old:
+        used = (await session.execute(select(func.count()).select_from(SeatAssignment).where(
+            SeatAssignment.session_id.in_([x.id for x in old])))).scalar_one()
+        if used:
+            flash(request, f"{label} smenalarida {used} ta o'quvchi joylangan. Sonni o'zgartirish uchun avval "
+                           f"shu sinf taqsimotini bekor qiling.", "error")
+            return _back("grades", round_.id, f"&g={grade.id}")
+        for x in old:
+            await session.delete(x)
+        await session.flush()
+    count = -(-n // per)          # yuqoriga yaxlitlash
+    if count > 60:
+        flash(request, f"{count} ta smena juda ko'p — smenaga ko'proq o'quvchi yozing", "error")
+        return _back("grades", round_.id, f"&g={grade.id}")
+    before = _intv(form.get("arrive_before"), 30, 0, 180)
+    dur = _intv(form.get("duration_min"), 120, 10, 600)
+    pos = (await session.execute(select(func.max(ExamSession.position)))).scalar() or 0
+    for k, (d, t) in enumerate(_session_times(day, times, count, bool(form.get("skip_sunday"))), 1):
+        h, m = map(int, t.split(":"))
+        arrive = (datetime.combine(d, datetime.min.time()) + timedelta(hours=h, minutes=m - before)).strftime("%H:%M")
+        pos += 1
+        session.add(ExamSession(round_id=round_.id, name=f"{label} · {k}-smena", day=d, start_time=t,
+                                arrive_time=arrive, duration_min=dur, position=pos, grade_id=grade.id,
+                                max_students=per))
+    audit.log(session, user, "create", "exam_session", grade.id,
+              f"{label}: {n} o'quvchi, smenaga {per} → {count} smena", ip=client_ip(request))
+    await session.commit()
+    last = n - per * (count - 1)
+    flash(request, f"✅ {label}: {n} o'quvchi → {count} ta smena (har biriga {per} tadan"
+                   + (f", oxirgisiga {last} ta" if last != per else "") + "). Endi «▶️ Taqsimlash»ni bosing.")
+    return _back("grades", round_.id, f"&g={grade.id}")
+
+
+@router.post("/grade-run/{gid}")
+async def grade_run(gid: int, request: Request, user: User = Depends(require_admin),
+                    session: AsyncSession = Depends(get_session)):
+    form = await request.form()
+    round_ = await _round(session, int_or_none(form.get("round_id")))
+    rid = round_.id
+    grade = await session.get(Grade, gid)
+    if grade is None:
+        raise HTTPException(404)
+    label = seating.grade_label(grade.name)
+    try:
+        res = await seating.run_grade(session, round_, gid, seed=secrets.randbelow(10 ** 9))
+    except ValueError as e:
+        await session.rollback()
+        flash(request, str(e), "error")
+        return _back("grades", rid, f"&g={gid}")
+    audit.log(session, user, "create", "seating", rid, f"{label} taqsimlandi: {len(res.assignments)} o'quvchi",
+              ip=client_ip(request))
+    await session.commit()
+    flash(request, f"✅ {label}: {len(res.assignments)} ta o'quvchi o'z smenalariga joylandi. Boshqa sinflarga tegilmadi.")
+    return _back("grades", rid, f"&g={gid}")
+
+
+@router.post("/grade-reset/{gid}")
+async def grade_reset(gid: int, request: Request, user: User = Depends(require_admin),
+                      session: AsyncSession = Depends(get_session)):
+    form = await request.form()
+    round_ = await _round(session, int_or_none(form.get("round_id")))
+    grade = await session.get(Grade, gid)
+    if grade is None:
+        raise HTTPException(404)
+    if not verify_password(str(form.get("password") or ""), user.password_hash):
+        flash(request, "Parol noto'g'ri", "error")
+        return _back("grades", round_.id, f"&g={gid}")
+    n = await seating.reset_grade(session, round_, gid)
+    label = seating.grade_label(grade.name)
+    audit.log(session, user, "delete", "seating", round_.id, f"{label} taqsimoti bekor qilindi: {n} ta",
+              ip=client_ip(request))
+    await session.commit()
+    flash(request, f"{label} taqsimoti bekor qilindi ({n} ta o'rin bo'shatildi). Boshqa sinflar joyida.")
+    return _back("grades", round_.id, f"&g={gid}")
+
+
+@router.post("/grade-sessions/{gid}/delete")
+async def grade_sessions_delete(gid: int, request: Request, user: User = Depends(require_admin),
+                                session: AsyncSession = Depends(get_session)):
+    form = await request.form()
+    round_ = await _round(session, int_or_none(form.get("round_id")))
+    ss = (await session.execute(select(ExamSession).where(ExamSession.round_id == round_.id,
+                                                          ExamSession.grade_id == gid))).scalars().all()
+    used = (await session.execute(select(func.count()).select_from(SeatAssignment).where(
+        SeatAssignment.session_id.in_([x.id for x in ss] or [0])))).scalar_one()
+    if used:
+        flash(request, f"Smenalarda {used} ta o'quvchi joylangan. Avval shu sinf taqsimotini bekor qiling.", "error")
+        return _back("grades", round_.id, f"&g={gid}")
+    for x in ss:
+        await session.delete(x)
+    audit.log(session, user, "delete", "exam_session", gid, f"Sinf smenalari o'chirildi: {len(ss)} ta",
+              ip=client_ip(request))
+    await session.commit()
+    flash(request, f"{len(ss)} ta smena o'chirildi — bu sinf endi umumiy smenalarga taqsimlanadi.")
+    return _back("grades", round_.id)
 
 
 # ---------------------------------------------------------------------------

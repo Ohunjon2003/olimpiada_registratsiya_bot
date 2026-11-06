@@ -437,8 +437,13 @@ class ExamSession(Base):
     duration_min: Mapped[int] = mapped_column(Integer, default=120)
     position: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Sinf smenasi: to'ldirilsa — bu smenaga FAQAT shu sinf o'quvchilari tushadi (sinflar aralashmaydi)
+    grade_id: Mapped[Optional[int]] = mapped_column(ForeignKey("grades.id", ondelete="SET NULL"), nullable=True)
+    # Smenaga ko'pi bilan nechta o'quvchi (bo'sh — barcha xonalar sig'imicha)
+    max_students: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     round: Mapped["Round"] = relationship(lazy="selectin")
+    grade: Mapped[Optional["Grade"]] = relationship(lazy="selectin")
 
 
 class SeatAssignment(Base):

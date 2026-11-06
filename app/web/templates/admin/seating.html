@@ -13,12 +13,15 @@
 
 <div class="grid g4 mb">
   <div class="card stat"><div class="v">{{ stats.eligible }}</div><div class="l">Qatnashadigan o'quvchi</div></div>
-  <div class="card stat"><div class="v">{{ stats.per_session }} × {{ stats.sessions }}</div><div class="l">O'rin × smena = <b>{{ stats.capacity }}</b> joy</div></div>
+  <div class="card stat"><div class="v">{{ stats.capacity }}</div><div class="l">Joy: {{ stats.sessions }} smena, smenada ≤ {{ stats.per_session }} o'rin</div></div>
   <div class="card stat"><div class="v">{{ stats.assigned }}</div><div class="l">Joy biriktirilgan{% if stats.unassigned %} · <span class="badge warn">{{ stats.unassigned }} ta joylanmagan</span>{% endif %}</div></div>
   <div class="card stat"><div class="v">{{ stats.sent }}</div><div class="l">Ruxsatnoma yuborilgan</div></div>
 </div>
 {% if stats.per_session and stats.eligible > stats.capacity %}
-<div class="alert warn">⚠️ Joy yetmaydi: {{ stats.eligible }} o'quvchiga kamida <b>{{ stats.need_sessions }} ta smena</b> kerak (hozir {{ stats.sessions }} ta) yoki ko'proq xona qo'shing.</div>
+<div class="alert warn">⚠️ Joy yetmaydi: {{ stats.eligible }} o'quvchiga {{ stats.capacity }} joy bor.{% if not stats.graded %} Kamida <b>{{ stats.need_sessions }} ta smena</b> kerak (hozir {{ stats.sessions }} ta) yoki ko'proq xona qo'shing.{% else %} Smenalar sonini tekshiring.{% endif %}</div>
+{% endif %}
+{% if stats.wrong %}
+<div class="alert warn">⚠️ {{ stats.wrong }} ta o'quvchi boshqa sinf smenasida (sinfi o'zgargan yoki sinf smenasi keyin yaratilgan). «🪑 Taqsimot» → «➕ Joylanmaganlarni joylash» ularni o'z smenasiga o'tkazadi.</div>
 {% endif %}
 
 <div class="tabs mb">
@@ -91,11 +94,11 @@
 <div class="grid g2">
   <div>
     <div class="table-wrap mb"><table>
-      <thead><tr><th>Smena</th><th>Sana</th><th>Kelish</th><th>Boshlanish</th><th>Davomiylik</th><th>O'quvchi</th><th></th></tr></thead>
+      <thead><tr><th>Smena</th><th>Sinf</th><th>Sana</th><th>Kelish</th><th>Boshlanish</th><th>Davomiylik</th><th>O'quvchi</th><th></th></tr></thead>
       <tbody>
       {% for s in sessions %}
-      <tr><td><b>{{ s.name }}</b></td><td>{{ s.day.strftime('%d.%m.%Y') }}</td><td>{{ s.arrive_time }}</td><td>{{ s.start_time }}</td><td>{{ s.duration_min }} daq.</td>
-        <td>{{ per_session.get(s.id, 0) }} / {{ stats.per_session }}</td>
+      <tr><td><b>{{ s.name }}</b></td><td>{% if s.grade %}<span class="badge">{{ grade_label(s.grade.name) }}</span>{% else %}<span class="muted small">umumiy</span>{% endif %}</td><td>{{ s.day.strftime('%d.%m.%Y') }}</td><td>{{ s.arrive_time }}</td><td>{{ s.start_time }}</td><td>{{ s.duration_min }} daq.</td>
+        <td>{{ per_session.get(s.id, 0) }} / {{ scap[s.id] }}</td>
         <td class="right nowrap">
           <details class="inline-edit"><summary class="btn sm">✏️</summary>
             <form method="post" action="/admin/seating/session" class="mt-s card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="round_id" value="{{ round.id }}">
@@ -103,19 +106,21 @@
               <div class="field"><label>Sana</label><input type="date" name="day" value="{{ s.day.isoformat() }}"></div>
               <div class="field"><label>Kelish</label><input type="time" name="arrive_time" value="{{ s.arrive_time }}"></div>
               <div class="field"><label>Boshlanish</label><input type="time" name="start_time" value="{{ s.start_time }}"></div>
-              <div class="field"><label>Davomiylik (daq.)</label><input type="number" name="duration_min" value="{{ s.duration_min }}" min="10" max="600"></div></div>
+              <div class="field"><label>Davomiylik (daq.)</label><input type="number" name="duration_min" value="{{ s.duration_min }}" min="10" max="600"></div>
+              <div class="field"><label>Sinf</label><select name="grade_id"><option value="">Umumiy (hamma sinflar)</option>{% for g in grades %}<option value="{{ g.id }}" {% if g.id == s.grade_id %}selected{% endif %}>{{ grade_label(g.name) }}</option>{% endfor %}</select></div>
+              <div class="field"><label>Ko'pi bilan o'quvchi</label><input type="number" name="max_students" value="{{ s.max_students or '' }}" min="1" placeholder="{{ stats.per_session }}"><div class="help">Bo'sh — barcha xonalar sig'imicha</div></div></div>
               <div class="btns"><button class="btn sm primary">Saqlash</button></div></form>
             <form method="post" action="/admin/seating/session/{{ s.id }}/delete" class="mt-s" data-confirm="Smena o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm danger">🗑 O'chirish</button></form>
           </details></td></tr>
-      {% else %}<tr><td colspan="7" class="empty">Smenalar yo'q</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="8" class="empty">Smenalar yo'q</td></tr>{% endfor %}
       </tbody></table></div>
-    <p class="muted small">Bir smenada barcha xonalar ishlatiladi. Har o'quvchi o'z fanlarini bitta smenada yozadi.</p>
+    <p class="muted small">Har o'quvchi o'z fanlarini bitta smenada yozadi. Sinflarni alohida smenalarga bo'lish — «🎓 Sinflar bo'yicha» bo'limida.</p>
   </div>
   <div>
     <form method="post" action="/admin/seating/sessions/generate" class="card mb">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
-      <h2>⚡️ Avtomatik yaratish</h2>
-      <div class="help mb">{{ stats.eligible }} o'quvchi, smenada {{ stats.per_session }} o'rin → kamida <b>{{ stats.need_sessions or 1 }}</b> smena kerak.</div>
+      <h2>⚡️ Avtomatik yaratish (umumiy smenalar)</h2>
+      <div class="help mb">{% if stats.graded %}Sinf smenasi yo'q sinflar: {% endif %}{{ stats.general_eligible }} o'quvchi, smenada {{ stats.per_session }} o'rin → kamida <b>{{ stats.need_sessions or 1 }}</b> smena kerak.</div>
       <div class="grid g2">
         <div class="field"><label>Nechta smena</label><input type="number" name="count" value="{{ [stats.need_sessions or 1, 1]|max }}" min="1" max="40"></div>
         <div class="field"><label>Birinchi kun</label><input type="date" name="start_day" value="{{ (today).isoformat() }}" required></div>
@@ -142,6 +147,106 @@
 </div>
 {% endif %}
 
+{# ------------------------------------------------------------------ SINFLAR BO'YICHA #}
+{% if tab == 'grades' %}
+{% set sel = request.query_params.get('g', '') %}
+<div class="card mb">
+  <h2>🎓 Sinflarni alohida smenalarga bo'lish</h2>
+  <div class="flow-step mb-s"><span class="dot">1</span><div>Sinfni oching va <b>«1 smenaga nechta o'quvchi»</b>ni yozing: smenalar soni o'zi hisoblanadi.</div></div>
+  <div class="flow-step mb-s"><span class="dot">2</span><div>Sana va soatni kiritib <b>«Smenalarni yaratish»</b>ni bosing. Masalan: «2-sinf · 1-smena», «2-sinf · 2-smena».</div></div>
+  <div class="flow-step mb-s"><span class="dot">3</span><div><b>«▶️ Shu sinfni taqsimlash»</b>ni bosing: o'quvchilar faqat o'z sinf smenalariga, maktablar tartibida joylanadi. Boshqa sinflarga tegilmaydi.</div></div>
+  <p class="muted small" style="margin:6px 0 0">Sinf smenasiga boshqa sinf o'quvchisi tushmaydi. Smena yaratilmagan sinflar umumiy smenalarga taqsimlanadi («🪑 Taqsimot»). Ruxsatnomada smena nomi, sana, xona va o'rin chiqadi.</p>
+</div>
+{% if not stats.per_session %}<div class="alert warn">Avval «🏫 Xonalar» bo'limida xonalarni kiriting — smenaga nechta o'quvchi sig'ishi xonalardan hisoblanadi.</div>{% endif %}
+
+<div class="table-wrap mb"><table>
+  <thead><tr><th>Sinf</th><th>O'quvchi</th><th>Smenalar</th><th>Joylangan</th><th></th></tr></thead>
+  <tbody>
+  {% for g in overview %}
+  <tr><td><b>{{ g.label }}</b></td><td>{{ g.n }}</td>
+    <td>{% if g.sessions %}{{ g.sessions|length }} ta · smenaga {{ g.per or stats.per_session }}{% else %}<span class="muted small">umumiy smenalarda</span>{% endif %}</td>
+    <td>{% if g.sessions %}{% if g.placed >= g.n and g.n %}<span class="badge ok">{{ g.placed }}/{{ g.n }} ✓</span>{% else %}{{ g.placed }}/{{ g.n }}{% endif %}{% else %}—{% endif %}</td>
+    <td class="right"><a class="btn sm" href="?tab=grades&round_id={{ round.id }}&g={{ g.grade.id }}#g-{{ g.grade.id }}">Sozlash ▸</a></td></tr>
+  {% else %}<tr><td colspan="5" class="empty">Qatnashadigan o'quvchi yo'q</td></tr>{% endfor %}
+  </tbody></table></div>
+
+{% for g in overview %}
+<details class="card mb grade-box" id="g-{{ g.grade.id }}" {% if sel == g.grade.id|string or overview|length == 1 %}open{% endif %}>
+  <summary><h2 class="inline">{{ g.label }}</h2> <span class="muted">· {{ g.n }} o'quvchi{% if g.sessions %} · {{ g.sessions|length }} smena · joylangan {{ g.placed }}/{{ g.n }}{% endif %}</span></summary>
+  <div class="grid g2 mt-s">
+    <div>
+      {% if g.sessions %}
+      <div class="table-wrap mb"><table>
+        <thead><tr><th>Smena</th><th>Sana, vaqt</th><th>O'quvchi</th></tr></thead>
+        <tbody>{% for s in g.sessions %}
+          <tr><td><b>{{ s.name }}</b></td><td>{{ s.day.strftime('%d.%m.%Y') }} · {{ s.start_time }} <span class="muted small">(kelish {{ s.arrive_time }})</span></td>
+            <td>{{ g.loads.get(s.id, 0) }} / {{ scap[s.id] }}</td></tr>{% endfor %}</tbody></table></div>
+      {% if g.cap < g.n %}<div class="alert warn small">Smenalarga {{ g.cap }} o'rin, o'quvchi {{ g.n }} ta — smenalarni qayta yarating.</div>{% endif %}
+      {% if g.sent %}
+        <div class="alert info small">{{ g.sent }} ta o'quvchiga ruxsatnoma yuborilgan — qayta taqsimlab bo'lmaydi. Keyin qo'shilganlarni «🪑 Taqsimot» → «➕ Joylanmaganlarni joylash» bilan qo'ying.</div>
+      {% else %}
+      <form method="post" action="/admin/seating/grade-run/{{ g.grade.id }}" data-confirm="{{ g.label }} o'quvchilari o'z smenalariga {{ 'qaytadan ' if g.placed else '' }}joylanadi. Boshqa sinflarga tegilmaydi. Davom etaymi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+        <button class="btn primary" {% if not stats.per_session %}disabled{% endif %}>▶️ {{ 'Shu sinfni qaytadan taqsimlash' if g.placed else 'Shu sinfni taqsimlash' }}</button>
+      </form>
+      {% endif %}
+      {% if g.placed %}
+      <p class="small mt-s"><a href="?tab=plan&round_id={{ round.id }}">🪑 O'tirish sxemasini ko'rish →</a></p>
+      <details class="mt-s"><summary class="small muted">🗑 Shu sinf taqsimotini bekor qilish</summary>
+        <form method="post" action="/admin/seating/grade-reset/{{ g.grade.id }}" class="filters mt-s" data-confirm="{{ g.label }} o'quvchilarining joylari o'chiriladi. Ishonchingiz komilmi?">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+          <div><label class="small">Parolingiz</label><input type="password" name="password" required autocomplete="current-password"></div>
+          <div class="btns"><button class="btn danger sm">Bekor qilish</button></div>
+        </form>
+        {% if g.sent %}<div class="help">Diqqat: ruxsatnoma olganlar eski joyini ko'radi — keyin qayta yuborish kerak bo'ladi.</div>{% endif %}
+      </details>
+      {% else %}
+      <form method="post" action="/admin/seating/grade-sessions/{{ g.grade.id }}/delete" class="mt-s" data-confirm="{{ g.label }} smenalari o'chirilsinmi? Bu sinf umumiy smenalarga qaytadi.">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+        <button class="btn sm">🗑 Sinf smenalarini o'chirish</button>
+      </form>
+      {% endif %}
+      {% else %}
+      <p class="muted">Bu sinf hozir <b>umumiy smenalarga</b> taqsimlanadi. Alohida smenaga bo'lish uchun «Smenalarni yaratish» formasini to'ldiring.</p>
+      {% endif %}
+    </div>
+    <div>
+      {% if g.placed %}
+      <div class="alert info small">Smenaga nechta o'quvchini o'zgartirish uchun avval shu sinf taqsimotini bekor qiling.</div>
+      {% else %}
+      <form method="post" action="/admin/seating/grade-sessions" class="card soft">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}"><input type="hidden" name="grade_id" value="{{ g.grade.id }}">
+        <h3>{{ 'Smenalarni qayta yaratish' if g.sessions else 'Smenalarni yaratish' }}</h3>
+        <div class="field"><label>1 smenaga nechta o'quvchi</label>
+          <input type="number" name="per_shift" min="1" max="{{ stats.per_session or 100000 }}" value="{{ g.per or ([g.n, stats.per_session]|min if stats.per_session else g.n) }}" data-n="{{ g.n }}" oninput="gradeCount(this)" required>
+          <div class="help"><b class="gcount"></b> · barcha xonalarga bir smenada ko'pi bilan {{ stats.per_session }} ta sig'adi</div></div>
+        <div class="grid g2">
+          <div class="field"><label>Birinchi kun</label><input type="date" name="start_day" value="{{ (g.sessions[0].day if g.sessions else today).isoformat() }}" required></div>
+          <div class="field"><label>Boshlanish vaqtlari</label><input type="text" name="times" value="{{ (g.sessions|map(attribute='start_time')|unique|join(', ')) if g.sessions else '09:00' }}" required><div class="help">Kuniga 2 smena: <code>09:00, 13:00</code></div></div>
+          <div class="field"><label>Necha daqiqa oldin kelish</label><input type="number" name="arrive_before" value="30" min="0" max="180"></div>
+          <div class="field"><label>Davomiyligi (daq.)</label><input type="number" name="duration_min" value="{{ g.sessions[0].duration_min if g.sessions else 120 }}" min="10" max="600"></div>
+        </div>
+        <label class="check field"><input type="checkbox" name="skip_sunday" checked> Yakshanbani o'tkazib yuborish</label>
+        <div class="btns"><button class="btn primary">{{ 'Qayta yaratish' if g.sessions else 'Smenalarni yaratish' }}</button></div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</details>
+{% endfor %}
+<script>
+// «1 smenaga nechta» yozilishi bilan smenalar soni ko'rsatiladi
+function gradeCount(inp) {
+  var n = +inp.dataset.n || 0, per = +inp.value || 0, out = inp.parentNode.querySelector('.gcount');
+  if (!out) return;
+  if (!per) { out.textContent = ''; return; }
+  var k = Math.ceil(n / per), last = n - per * (k - 1);
+  out.textContent = n + ' o\'quvchi → ' + k + ' ta smena' + (k > 1 && last !== per ? ' (oxirgisida ' + last + ' ta)' : '');
+}
+document.querySelectorAll('input[name=per_shift]').forEach(gradeCount);
+</script>
+{% endif %}
+
 {# ------------------------------------------------------------------ TAQSIMOT #}
 {% if tab == 'plan' %}
 <div class="grid g2 mb">
@@ -160,6 +265,8 @@
   </form>
   <div class="card">
     <h2>▶️ Taqsimlash</h2>
+    {% set gs = overview|selectattr('sessions')|list %}
+    {% if gs %}<div class="help mb">🎓 Alohida smenali sinflar ({% for g in gs %}{{ g.label }}{{ ', ' if not loop.last }}{% endfor %}) o'z smenalariga, qolganlar umumiy smenalarga joylanadi. Bitta sinfni alohida taqsimlash — «🎓 Sinflar bo'yicha».</div>{% endif %}
     {% if stats.sent %}
       <div class="alert info small">{{ stats.sent }} ta o'quvchiga ruxsatnoma yuborilgan — to'liq qayta taqsimlab bo'lmaydi. Keyin qo'shilganlarni bo'sh joylarga qo'ying.</div>
     {% else %}

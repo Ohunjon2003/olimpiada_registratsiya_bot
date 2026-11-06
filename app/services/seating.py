@@ -6,11 +6,16 @@ Algoritm (3 bosqich):
   2) Xonalarga: har smenada xonalar sig'imiga mutanosib to'ldiriladi. Eng ko'p ishtirokchisi bor
      maktabdan boshlab har o'quvchi o'z maktabidan ENG KAM odami bor xonaga tushadi
      (maktab xonalar bo'ylab tekis tarqaladi).
+     Smenaga chek qo'yilgan bo'lsa (max_students) — kerakli xonalargina ishlatiladi (birinchi xonalardan).
   3) O'rindiqlarga: «qo'shni» jarimalari — bir partada 10, yon partada 4, old/orqa 2, diagonal 1.
      Avval maktablar navbatma-navbat «ilon izi» bo'ylab joylanadi, so'ng mahalliy qidiruv bilan
      (konfliktli o'quvchini eng yaxshi joy bilan almashtirish) jarima kamaytiriladi.
      Bir maktab xonaning yarmidan ko'pini egallasa — 0 konflikt matematik jihatdan mumkin emas,
      qolgan konfliktlar soni ko'rsatiladi.
+
+Sinf smenalari: smenaga sinf biriktirilsa (ExamSession.grade_id), u smenaga FAQAT shu sinf o'quvchilari
+tushadi. Sinf o'quvchilari maktablar tartibida smenalarga ketma-ket bo'linadi: har smenaga admin
+yozgan son (max_students), oxirgisiga qolgani. Sinfni alohida (boshqa sinflarga tegmasdan) taqsimlash mumkin.
 """
 from __future__ import annotations
 
@@ -284,12 +289,14 @@ class PlanResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def split_by_school_order(students: list[Student], n_sessions: int, cap: int) -> list[list[Student]]:
+def split_by_school_order(students: list[Student], n_sessions: int, cap) -> list[list[Student]]:
     """Maktablar tartibida smenalarga: 1-smena — birinchi maktablar, keyingisi — keyingilari.
 
     Har maktab o'rtasi qaysi smena «ulushiga» tushsa, o'sha smenaga to'liq beriladi (maktab bo'linmaydi).
     Smena sig'imidan oshsa — ortiqchasi keyingi smenaga suriladi (faqat shunda maktab bo'linadi).
+    cap — bitta son (hamma smenaga bir xil) yoki har smena uchun ro'yxat.
     """
+    caps = list(cap) if isinstance(cap, (list, tuple)) else [cap] * n_sessions
     by_school: dict[int, list[Student]] = defaultdict(list)
     order: dict[int, int] = {}
     for s in students:
@@ -297,26 +304,93 @@ def split_by_school_order(students: list[Student], n_sessions: int, cap: int) ->
         order[s.school] = s.order
     schools = sorted(by_school, key=lambda k: (order[k], k))
     N = len(students)
+    total = sum(caps) or 1
+    bounds, acc = [], 0           # smenalar «ulushi» sig'imga mutanosib
+    for c in caps:
+        acc += c
+        bounds.append(acc / total * N)
     chunks: list[list[Student]] = [[] for _ in range(n_sessions)]
     cum = 0
     for sch in schools:
         grp = sorted(by_school[sch], key=lambda x: x.id)
         mid = cum + len(grp) / 2
-        idx = min(n_sessions - 1, int(mid * n_sessions / N)) if N else 0
+        idx = next((i for i, bnd in enumerate(bounds) if mid < bnd), n_sessions - 1) if N else 0
         chunks[idx].extend(grp)
         cum += len(grp)
     # Sig'imdan oshganini keyingi smenaga (oxirgisidan — oldingiga) surish, tartib saqlanadi
     for i in range(n_sessions - 1):
-        if len(chunks[i]) > cap:
-            extra = chunks[i][cap:]
-            chunks[i] = chunks[i][:cap]
+        if len(chunks[i]) > caps[i]:
+            extra = chunks[i][caps[i]:]
+            chunks[i] = chunks[i][:caps[i]]
             chunks[i + 1] = extra + chunks[i + 1]
     for i in range(n_sessions - 1, 0, -1):
-        if len(chunks[i]) > cap:
-            extra = chunks[i][:len(chunks[i]) - cap]
-            chunks[i] = chunks[i][len(chunks[i]) - cap:]
+        if len(chunks[i]) > caps[i]:
+            extra = chunks[i][:len(chunks[i]) - caps[i]]
+            chunks[i] = chunks[i][len(chunks[i]) - caps[i]:]
             chunks[i - 1] = chunks[i - 1] + extra
     return chunks
+
+
+def session_cap(sess: ExamSession, per_session: int) -> int:
+    """Smenaga sig'adigan o'quvchilar: chek (max_students) bo'lsa — u, lekin xonalar sig'imidan ko'p emas."""
+    if sess.max_students and sess.max_students > 0:
+        return min(per_session, sess.max_students)
+    return per_session
+
+
+def room_targets(n: int, room_list: list[Room], caps: dict[int, int], compact: bool) -> list[int]:
+    """Smenadagi n o'quvchini xonalarga bo'lish.
+
+    compact=False — barcha xonalarga sig'imga mutanosib (eski xatti-harakat).
+    compact=True  — faqat kerakli xonalar (ro'yxat boshidan), ular orasida teng: kam nazoratchi kerak bo'ladi.
+    """
+    if not compact:
+        return _split_even(n, [caps[r.id] for r in room_list])
+    used, acc = 0, 0
+    for r in room_list:
+        if acc >= n:
+            break
+        acc += caps[r.id]
+        used += 1
+    part = _split_even(n, [caps[r.id] for r in room_list[:used]])
+    return part + [0] * (len(room_list) - used)
+
+
+def _seat_session(res: "PlanResult", sess: ExamSession, chunk: list[Student], room_list: list[Room],
+                  caps: dict[int, int], one_per_desk: bool, rng: random.Random, compact: bool) -> None:
+    """Bitta smenadagi o'quvchilarni xonalar va o'rindiqlarga joylash (res ga yoziladi)."""
+    if not chunk:
+        return
+    targets = room_targets(len(chunk), room_list, caps, compact)
+    # 2) Xonalar: guruhlar ketma-ket xonalarni egallaydi, guruh ichida maktablar tarqatiladi
+    groups: dict[str, list[Student]] = defaultdict(list)
+    for s in chunk:
+        groups[s.group].append(s)
+    room_iter = [[r.id, t] for r, t in zip(room_list, targets) if t > 0]
+    per_room: dict[int, list[Student]] = defaultdict(list)
+    ri = 0
+    for gname in sorted(groups):
+        members = groups[gname]
+        need, slots = len(members), []
+        while need > 0 and ri < len(room_iter):
+            take = min(need, room_iter[ri][1])
+            slots.append((room_iter[ri][0], take))
+            room_iter[ri][1] -= take
+            need -= take
+            if room_iter[ri][1] == 0:
+                ri += 1
+        for rid, lst in spread(members, slots).items():
+            per_room[rid].extend(lst)
+    # 3) O'rindiqlar
+    for r in room_list:
+        lst = per_room.get(r.id) or []
+        if not lst:
+            continue
+        seats, pen = arrange_room(r, [(s.id, s.school) for s in lst], one_per_desk, rng)
+        for pid, seat in seats.items():
+            res.assignments[pid] = (sess.id, r.id, seat)
+        res.room_penalty[(sess.id, r.id)] = pen
+        res.penalty += pen
 
 
 def plan(students: list[Student], sessions: list[ExamSession], rooms: list[Room], one_per_desk: bool,
@@ -328,16 +402,18 @@ def plan(students: list[Student], sessions: list[ExamSession], rooms: list[Room]
     per_session = sum(caps.values())
     if not sessions or per_session == 0:
         raise ValueError("Smena yoki xona yo'q")
-    if len(students) > per_session * len(sessions):
+    scaps = [session_cap(s, per_session) for s in sessions]
+    if len(students) > sum(scaps):
         need = math.ceil(len(students) / per_session)
-        raise ValueError(f"Joy yetmaydi: {len(students)} o'quvchi, {per_session * len(sessions)} o'rin "
-                         f"({len(sessions)} smena × {per_session}). Kamida {need} smena yoki ko'proq xona kerak.")
-    # 1) Smenalar: guruh bo'yicha tartiblab, teng bo'laklarga
+        raise ValueError(f"Joy yetmaydi: {len(students)} o'quvchi, {sum(scaps)} o'rin "
+                         f"({len(sessions)} smena, smenada ko'pi bilan {per_session}). "
+                         f"Kamida {need} smena yoki ko'proq xona kerak.")
+    # 1) Smenalar: guruh bo'yicha tartiblab, sig'imga mutanosib bo'laklarga
     students = sorted(students, key=lambda s: (s.group, s.school, s.id))
-    loads = _split_even(len(students), [per_session] * len(sessions))
+    loads = _split_even(len(students), scaps)
     chunks, i = [], 0
     if school_order:
-        chunks = split_by_school_order(students, len(sessions), per_session)
+        chunks = split_by_school_order(students, len(sessions), scaps)
         # Smena ichida — guruhsiz: maktablar xonalarga tekis tarqatiladi
         chunks = [[Student(s.id, s.school, "", s.order) for s in ch] for ch in chunks]
     elif any(s.group for s in students):
@@ -361,38 +437,37 @@ def plan(students: list[Student], sessions: list[ExamSession], rooms: list[Room]
                 k += 1
     room_list = [r for r in rooms if caps[r.id] > 0]
     for sess, chunk in zip(sessions, chunks):
-        if not chunk:
-            continue
-        targets = _split_even(len(chunk), [caps[r.id] for r in room_list])
-        # 2) Xonalar: guruhlar ketma-ket xonalarni egallaydi, guruh ichida maktablar tarqatiladi
-        groups: dict[str, list[Student]] = defaultdict(list)
-        for s in chunk:
-            groups[s.group].append(s)
-        room_iter = [[r.id, t] for r, t in zip(room_list, targets) if t > 0]
-        per_room: dict[int, list[Student]] = defaultdict(list)
-        ri = 0
-        for gname in sorted(groups):
-            members = groups[gname]
-            need, slots = len(members), []
-            while need > 0 and ri < len(room_iter):
-                take = min(need, room_iter[ri][1])
-                slots.append((room_iter[ri][0], take))
-                room_iter[ri][1] -= take
-                need -= take
-                if room_iter[ri][1] == 0:
-                    ri += 1
-            for rid, lst in spread(members, slots).items():
-                per_room[rid].extend(lst)
-        # 3) O'rindiqlar
-        for r in room_list:
-            lst = per_room.get(r.id) or []
-            if not lst:
-                continue
-            seats, pen = arrange_room(r, [(s.id, s.school) for s in lst], one_per_desk, rng)
-            for pid, seat in seats.items():
-                res.assignments[pid] = (sess.id, r.id, seat)
-            res.room_penalty[(sess.id, r.id)] = pen
-            res.penalty += pen
+        _seat_session(res, sess, chunk, room_list, caps, one_per_desk, rng, compact=bool(sess.max_students))
+    return res
+
+
+def plan_grade(students: list[Student], sessions: list[ExamSession], rooms: list[Room], one_per_desk: bool,
+               seed: Optional[int] = None, label: str = "") -> PlanResult:
+    """Bitta sinf: o'quvchilar maktablar tartibida smenalarga KETMA-KET bo'linadi.
+
+    Har smenaga — uning chegarasicha (admin yozgan son), oxirgi smenaga qolgani.
+    Smena ichida kerakli xonalargina ishlatiladi, maktablar xonalarga tekis tarqatiladi.
+    """
+    rng = random.Random(seed)
+    res = PlanResult()
+    caps = {r.id: len(room_seats(r, one_per_desk)) for r in rooms}
+    per_session = sum(caps.values())
+    if not students:
+        return res
+    if not sessions or per_session == 0:
+        raise ValueError(f"{label}: smena yoki xona yo'q")
+    scaps = [session_cap(s, per_session) for s in sessions]
+    if len(students) > sum(scaps):
+        per = scaps[0] if scaps else per_session
+        raise ValueError(f"{label}: joy yetmaydi — {len(students)} o'quvchi, smenalarda {sum(scaps)} o'rin. "
+                         f"Kamida {math.ceil(len(students) / max(1, per))} ta smena kerak — smenalarni qayta yarating.")
+    ordered = sorted(students, key=lambda s: (s.order, s.school, s.id))
+    room_list = [r for r in rooms if caps[r.id] > 0]
+    i = 0
+    for sess, cap in zip(sessions, scaps):
+        chunk = [Student(s.id, s.school, "", s.order) for s in ordered[i:i + cap]]
+        i += cap
+        _seat_session(res, sess, chunk, room_list, caps, one_per_desk, rng, compact=True)
     return res
 
 
@@ -402,6 +477,12 @@ def plan(students: list[Student], sessions: list[ExamSession], rooms: list[Room]
 async def active_rooms(session: AsyncSession) -> list[Room]:
     return (await session.execute(select(Room).where(Room.is_active == True)  # noqa: E712
                                   .order_by(Room.position, Room.id))).scalars().all()
+
+
+def grade_label(name: str) -> str:
+    """«7» → «7-sinf» («7-sinf» o'zgarmaydi)."""
+    name = (name or "").strip()
+    return name if "sinf" in name.lower() else f"{name}-sinf"
 
 
 async def round_sessions(session: AsyncSession, round_id: int) -> list[ExamSession]:
@@ -442,13 +523,36 @@ async def assignments(session: AsyncSession, round_id: int) -> list[SeatAssignme
     return (await session.execute(select(SeatAssignment).where(SeatAssignment.round_id == round_id))).scalars().all()
 
 
+def graded_sessions(sessions: list[ExamSession]) -> dict[int, list[ExamSession]]:
+    """Sinf smenalari: {sinf_id: [smenalar (vaqt tartibida)]}."""
+    out: dict[int, list[ExamSession]] = defaultdict(list)
+    for s in sessions:
+        if s.grade_id:
+            out[s.grade_id].append(s)
+    return out
+
+
+def wrong_place(a: SeatAssignment, graded: dict[int, list[ExamSession]]) -> bool:
+    """O'quvchi «begona» smenada: sinf smenasida boshqa sinf o'quvchisi yoki sinf smenasi bor sinf o'quvchisi
+    umumiy smenada."""
+    sess, p = a.session, a.participant
+    if sess is None or p is None:
+        return False
+    if sess.grade_id:
+        return sess.grade_id != p.grade_id
+    return p.grade_id in graded
+
+
 async def stats(session: AsyncSession, round_: Round) -> dict:
     rooms = await active_rooms(session)
     sessions = await round_sessions(session, round_.id)
     one = st.get("seating_one_per_desk")
     per_session = sum(len(room_seats(r, one)) for r in rooms)
-    eligible = (await session.execute(select(func.count()).select_from(Participant)
-                                      .where(ranking.eligible_condition(round_)))).scalar_one()
+    graded = graded_sessions(sessions)
+    people = await eligible_students(session, round_)
+    eligible = len(people)
+    general_eligible = sum(1 for p in people if p.grade_id not in graded)
+    general_sessions = [s for s in sessions if not s.grade_id]
     assigned = (await session.execute(
         select(func.count()).select_from(SeatAssignment).join(Participant, Participant.id == SeatAssignment.participant_id)
         .where(SeatAssignment.round_id == round_.id, ranking.eligible_condition(round_)))).scalar_one()
@@ -457,14 +561,68 @@ async def stats(session: AsyncSession, round_: Round) -> dict:
     stale = (await session.execute(
         select(func.count()).select_from(SeatAssignment).join(Participant, Participant.id == SeatAssignment.participant_id)
         .where(SeatAssignment.round_id == round_.id, ~ranking.eligible_condition(round_)))).scalar_one()
+    wrong = sum(1 for a in await assignments(session, round_.id)
+                if a.participant.status == "active" and wrong_place(a, graded))
+    capacity = sum(session_cap(s, per_session) for s in sessions)
     return {"rooms": len(rooms), "sessions": len(sessions), "per_session": per_session,
-            "capacity": per_session * len(sessions), "eligible": eligible, "assigned": assigned,
-            "unassigned": max(0, eligible - assigned), "sent": sent, "stale": stale,
-            "need_sessions": math.ceil(eligible / per_session) if per_session else 0}
+            "capacity": capacity, "eligible": eligible, "assigned": assigned,
+            "unassigned": max(0, eligible - assigned), "sent": sent, "stale": stale, "wrong": wrong,
+            "general_eligible": general_eligible, "general_sessions": len(general_sessions),
+            "graded": len(graded),
+            "need_sessions": math.ceil(general_eligible / per_session) if per_session else 0}
+
+
+async def grade_overview(session: AsyncSession, round_: Round) -> list[dict]:
+    """«Sinflar bo'yicha» bo'limi uchun: har sinf — o'quvchilar, smenalar, joylangan, yuborilgan."""
+    from ..models import Grade
+    grades = (await session.execute(select(Grade).order_by(Grade.position, Grade.id))).scalars().all()
+    sessions = await round_sessions(session, round_.id)
+    graded = graded_sessions(sessions)
+    rooms = await active_rooms(session)
+    per_session = sum(len(room_seats(r, st.get("seating_one_per_desk"))) for r in rooms)
+    people = await eligible_students(session, round_)
+    n_by = Counter(p.grade_id for p in people)
+    eligible_ids = {p.id for p in people}
+    asg = await assignments(session, round_.id)
+    placed, sent, by_sess = Counter(), Counter(), Counter()
+    for a in asg:
+        by_sess[a.session_id] += 1
+        if a.participant_id in eligible_ids:
+            if a.session and a.session.grade_id == a.participant.grade_id:
+                placed[a.participant.grade_id] += 1
+            if a.pass_sent_at and a.participant.grade_id:
+                sent[a.participant.grade_id] += 1
+    out = []
+    for g in grades:
+        ss = graded.get(g.id, [])
+        if not ss and not n_by.get(g.id):
+            continue
+        cap = sum(session_cap(x, per_session) for x in ss)
+        out.append({"grade": g, "label": grade_label(g.name), "n": n_by.get(g.id, 0), "sessions": ss,
+                    "cap": cap, "placed": placed.get(g.id, 0), "sent": sent.get(g.id, 0),
+                    "per": ss[0].max_students if ss and ss[0].max_students else 0,
+                    "loads": {x.id: by_sess.get(x.id, 0) for x in ss}})
+    return out
+
+
+def _students(people: list[Participant], ranks: dict[int, int], how: str) -> list[Student]:
+    return [Student(p.id, p.school_id, "" if how in ("school_order", "") else _group_key(p, how),
+                    ranks.get(p.school_id, 0)) for p in people]
+
+
+async def _write(session: AsyncSession, round_id: int, res: PlanResult) -> None:
+    for pid, (sid, rid, seat) in res.assignments.items():
+        session.add(SeatAssignment(participant_id=pid, round_id=round_id, session_id=sid, room_id=rid,
+                                   row=seat[0], desk=seat[1], seat=seat[2]))
+    await session.flush()
 
 
 async def run_full(session: AsyncSession, round_: Round, seed: Optional[int] = None) -> PlanResult:
-    """To'liq taqsimlash (oldingi taqsimot o'chiriladi). Ruxsatnoma yuborilgan bo'lsa — ruxsat yo'q."""
+    """To'liq taqsimlash (oldingi taqsimot o'chiriladi). Ruxsatnoma yuborilgan bo'lsa — ruxsat yo'q.
+
+    Sinf smenasi bor sinflar — o'z smenalariga (plan_grade), qolganlar — umumiy smenalarga (plan).
+    """
+    import asyncio
     sent = (await session.execute(select(func.count()).select_from(SeatAssignment).where(
         SeatAssignment.round_id == round_.id, SeatAssignment.pass_sent_at.is_not(None)))).scalar_one()
     if sent:
@@ -473,19 +631,71 @@ async def run_full(session: AsyncSession, round_: Round, seed: Optional[int] = N
     people = await eligible_students(session, round_)
     how = st.get("seating_group_by") or "none"
     ranks = await school_ranks(session)
-    students = [Student(p.id, p.school_id, "" if how == "school_order" else _group_key(p, how),
-                        ranks.get(p.school_id, 0)) for p in people]
     sessions = await round_sessions(session, round_.id)
     rooms = await active_rooms(session)
-    import asyncio
-    res = await asyncio.to_thread(plan, students, sessions, rooms, bool(st.get("seating_one_per_desk")), seed,
-                                  how == "school_order")
+    one = bool(st.get("seating_one_per_desk"))
+    graded = graded_sessions(sessions)
+    general = [s for s in sessions if not s.grade_id]
+    rest = [p for p in people if p.grade_id not in graded]
+    if rest and not general:
+        miss = Counter(grade_label(p.grade.name) if p.grade else "sinfsiz" for p in rest)
+        raise ValueError("Bu sinflar uchun smena yo'q: " + ", ".join(f"{k} ({v} ta)" for k, v in miss.items()) +
+                         ". «🎓 Sinflar bo'yicha»da ularga smena yarating yoki umumiy smena qo'shing.")
+    res = PlanResult()
+    if rest:
+        res = await asyncio.to_thread(plan, _students(rest, ranks, how), general, rooms, one, seed,
+                                      how == "school_order")
+    for gid, ss in graded.items():
+        grp = [p for p in people if p.grade_id == gid]
+        label = grade_label(grp[0].grade.name) if grp and grp[0].grade else "Sinf"
+        r = await asyncio.to_thread(plan_grade, _students(grp, ranks, ""), ss, rooms, one, seed, label)
+        res.assignments.update(r.assignments)
+        res.room_penalty.update(r.room_penalty)
+        res.penalty += r.penalty
     await session.execute(delete(SeatAssignment).where(SeatAssignment.round_id == round_.id))
-    for pid, (sid, rid, seat) in res.assignments.items():
-        session.add(SeatAssignment(participant_id=pid, round_id=round_.id, session_id=sid, room_id=rid,
-                                   row=seat[0], desk=seat[1], seat=seat[2]))
-    await session.flush()
+    await _write(session, round_.id, res)
     return res
+
+
+async def _grade_assignment_ids(session: AsyncSession, round_id: int, grade_id: int) -> list[SeatAssignment]:
+    """Shu sinfga tegishli joylar: sinf o'quvchilari YOKI shu sinf smenalaridagi har kim."""
+    return [a for a in await assignments(session, round_id)
+            if (a.participant and a.participant.grade_id == grade_id) or (a.session and a.session.grade_id == grade_id)]
+
+
+async def run_grade(session: AsyncSession, round_: Round, grade_id: int,
+                    seed: Optional[int] = None) -> PlanResult:
+    """Faqat bitta sinfni o'z smenalariga taqsimlash — boshqa sinflarga tegilmaydi."""
+    import asyncio
+    sessions = await round_sessions(session, round_.id)
+    ss = graded_sessions(sessions).get(grade_id, [])
+    if not ss:
+        raise ValueError("Bu sinf uchun smena yaratilmagan")
+    label = grade_label(ss[0].grade.name if ss[0].grade else "")
+    old = await _grade_assignment_ids(session, round_.id, grade_id)
+    sent = sum(1 for a in old if a.pass_sent_at)
+    if sent:
+        raise ValueError(f"{label}: {sent} ta o'quvchiga ruxsatnoma yuborilgan — qayta taqsimlab bo'lmaydi. "
+                         "Yangi o'quvchilar uchun «Joylanmaganlarni joylash»dan foydalaning.")
+    people = [p for p in await eligible_students(session, round_) if p.grade_id == grade_id]
+    rooms = await active_rooms(session)
+    ranks = await school_ranks(session)
+    res = await asyncio.to_thread(plan_grade, _students(people, ranks, ""), ss, rooms,
+                                  bool(st.get("seating_one_per_desk")), seed, label)
+    if old:
+        await session.execute(delete(SeatAssignment).where(SeatAssignment.id.in_([a.id for a in old])))
+        await session.flush()
+    await _write(session, round_.id, res)
+    return res
+
+
+async def reset_grade(session: AsyncSession, round_: Round, grade_id: int) -> int:
+    """Bitta sinf taqsimotini bekor qilish (boshqa sinflar joyida qoladi)."""
+    old = await _grade_assignment_ids(session, round_.id, grade_id)
+    if old:
+        await session.execute(delete(SeatAssignment).where(SeatAssignment.id.in_([a.id for a in old])))
+        await session.flush()
+    return len(old)
 
 
 async def occupancy(session: AsyncSession, round_id: int) -> dict[tuple[int, int], dict[Seat, SeatAssignment]]:
@@ -499,43 +709,68 @@ async def occupancy(session: AsyncSession, round_id: int) -> dict[tuple[int, int
 async def place_missing(session: AsyncSession, round_: Round) -> tuple[int, int, list[str]]:
     """Joylanmagan (keyin qo'shilgan) o'quvchilarni bo'sh joylarga qo'yadi, boshqalarga tegmaydi.
 
-    Chetlatilgan/tushib qolganlarning o'rni bo'shatiladi. Natija: (joylandi, bo'shatildi, xatolar).
+    Chetlatilgan/tushib qolganlarning o'rni bo'shatiladi. «Begona» smenadagilar (sinfi o'zgargan yoki
+    sinf smenasi keyin yaratilgan) — ruxsatnoma hali yuborilmagan bo'lsa — o'z sinf smenasiga ko'chiriladi.
+    Sinf o'quvchisi faqat o'z sinf smenalariga, qolganlar — umumiy smenalarga; smena chegarasi hisobga olinadi.
+    Natija: (joylandi, bo'shatildi, xatolar).
     """
+    errors: list[str] = []
+    sessions = await round_sessions(session, round_.id)
+    graded = graded_sessions(sessions)
     # 1) Endi qatnashmaydiganlar o'rnini bo'shatish
     stale_ids = (await session.execute(
         select(SeatAssignment.id).join(Participant, Participant.id == SeatAssignment.participant_id)
         .where(SeatAssignment.round_id == round_.id, ~ranking.eligible_condition(round_)))).scalars().all()
-    if stale_ids:
-        await session.execute(delete(SeatAssignment).where(SeatAssignment.id.in_(stale_ids)))
+    # 2) Begona smenadagilar
+    wrong = [a for a in await assignments(session, round_.id)
+             if a.id not in set(stale_ids) and a.participant.status == "active" and wrong_place(a, graded)]
+    moved = [a.id for a in wrong if not a.pass_sent_at]
+    for a in wrong:
+        if a.pass_sent_at:
+            errors.append(f"{a.participant.full_name} (ID {a.participant.code}): boshqa sinf smenasida, "
+                          "ruxsatnoma yuborilgan — qo'lda ko'chiring")
+    if stale_ids or moved:
+        await session.execute(delete(SeatAssignment).where(SeatAssignment.id.in_(list(stale_ids) + moved)))
         await session.flush()
     people = await eligible_students(session, round_)
     have = {a.participant_id for a in await assignments(session, round_.id)}
     todo = [p for p in people if p.id not in have]
     if not todo:
-        return 0, len(stale_ids), []
-    sessions = await round_sessions(session, round_.id)
+        return 0, len(stale_ids), errors
     rooms = await active_rooms(session)
     one = bool(st.get("seating_one_per_desk"))
+    per_session = sum(len(room_seats(r, one)) for r in rooms)
     occ = await occupancy(session, round_.id)
-    errors, placed = [], 0
+    load = Counter()
+    for (sid, _), placed_ in occ.items():
+        load[sid] += len(placed_)
+    general = [s for s in sessions if not s.grade_id]
+    placed = 0
     for p in todo:
+        cands = graded.get(p.grade_id) or general
         best = None
-        for sess in sessions:
+        for sess in cands:
+            if load[sess.id] >= session_cap(sess, per_session):
+                continue
+            compact = bool(sess.max_students)
             for r in rooms:
                 taken = occ.get((sess.id, r.id), {})
                 free = [s for s in room_seats(r, one) if s not in taken]
                 if not free:
                     continue
                 same = sum(1 for a in taken.values() if a.participant.school_id == p.school_id)
-                load = len(taken) / max(1, len(room_seats(r, one)))
+                fill = len(taken) / max(1, len(room_seats(r, one)))
+                # chekli (sinf) smenada — allaqachon ishlatilayotgan xonaga afzallik (yangi xona ochilmasin)
+                unused = 1 if compact and not taken else 0
                 for s in free:
                     pen = sum(w for n, w in neighbors(r, s)
                               if n in taken and taken[n].participant.school_id == p.school_id)
-                    key = (pen, same, round(load, 3), sess.day, sess.start_time, r.position, r.id, s)
+                    key = (unused, pen, same, round(fill, 3), sess.day, sess.start_time, r.position, r.id, s)
                     if best is None or key < best[0]:
                         best = (key, sess, r, s)
         if best is None:
-            errors.append(f"{p.full_name} (ID {p.code}): bo'sh joy qolmagan")
+            where = grade_label(p.grade.name) + " smenalarida" if p.grade_id in graded and p.grade else "smenalarda"
+            errors.append(f"{p.full_name} (ID {p.code}): {where} bo'sh joy qolmagan")
             continue
         _, sess, r, s = best
         a = SeatAssignment(participant_id=p.id, round_id=round_.id, session_id=sess.id, room_id=r.id,
@@ -543,6 +778,7 @@ async def place_missing(session: AsyncSession, round_: Round) -> tuple[int, int,
         a.participant = p
         session.add(a)
         occ.setdefault((sess.id, r.id), {})[s] = a
+        load[sess.id] += 1
         placed += 1
     await session.flush()
     return placed, len(stale_ids), errors

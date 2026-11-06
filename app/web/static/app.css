@@ -517,3 +517,12 @@ form.filters.loading input[type=search] { background-image: linear-gradient(90de
 @keyframes ls { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (max-width: 900px) { .topsearch { display: none; } }
 @media (min-width: 901px) { .dash-search { display: none; } }
+
+/* Sinflar bo'yicha smenalar */
+.mb-s { margin-bottom: 8px; }
+.grade-box > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.grade-box > summary::-webkit-details-marker { display: none; }
+.grade-box > summary::before { content: "▸"; color: #64748b; margin-right: 4px; transition: transform .15s; }
+.grade-box[open] > summary::before { transform: rotate(90deg); }
+.grade-box h2.inline { display: inline; margin: 0; }
+.card.soft { background: #f8fafc; box-shadow: none; }
