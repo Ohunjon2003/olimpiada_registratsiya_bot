@@ -6,6 +6,7 @@
 <div class="page-head">
   <div><h1>🙋 Davomat — {{ round.name }}</h1>
     <div class="muted">Familiya, ism yoki ID ning birinchi harflarini yozing — ro'yxat darhol chiqadi. Bitta o'quvchi qolsa, <b>Enter</b> uni «Keldi» deb belgilaydi.</div></div>
+  <a class="btn primary" href="/attendance/scan?round_id={{ round.id }}">📷 QR skaner</a>
   {% if user.is_admin and rounds|length > 1 %}
   <form method="get" class="inline">
     <select name="round_id" onchange="this.form.submit()">

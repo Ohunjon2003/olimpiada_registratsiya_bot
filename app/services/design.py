@@ -10,12 +10,13 @@ Dizayn — JSON hujjat:
       "els":  [ element, ... ]          # pastdan yuqoriga (oxirgisi eng ustida)
     }
 
-Element umumiy maydonlari: id, type (text|image|rect|ellipse|line), name, x, y, w, h,
+Element umumiy maydonlari: id, type (text|image|rect|ellipse|line|qr), name, x, y, w, h,
 rot (gradus, soat mili bo'yicha), opacity (0..1), locked, hidden.
   * x, w — sahifa kengligining foizi; y, h — balandligining foizi (chap-yuqori burchakdan).
   * Barcha qalinlik va o'lchamlar (shrift, chiziq, soya) — sahifa KENGLIGINING foizi.
     Shu sababli dizayn istalgan o'lcham/sifatda bir xil ko'rinadi.
 
+QR (faqat ruxsatnoma): color — davomat QR kodi, matni ctx["qr"] (har o'quvchiga o'ziniki).
 Matn: text, font, bold, size, color, align (left|center|right), valign (top|middle|bottom),
       lh (qator balandligi), ls (harflar oralig'i, em), upper, wrap (so'z bo'yicha ko'chirish),
       fit (sig'masa kichrayadi), shadow {color, blur, dx, dy} | null, stroke {color, w} | null.
@@ -228,7 +229,7 @@ def page_size(page: dict) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 _COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 _ASSET = re.compile(r"^[a-f0-9]{16}\.png$")
-EL_TYPES = ("text", "image", "rect", "ellipse", "line")
+EL_TYPES = ("text", "image", "rect", "ellipse", "line", "qr")
 MAX_ELEMENTS = 120
 
 
@@ -315,6 +316,8 @@ def clean_design(raw: Any) -> dict:
                 "stroke": ({"color": _color(sk.get("color"), "#ffffff"), "w": _num(sk.get("w"), 0.1, 0.01, 3)}
                            if isinstance(sk, dict) else None),
             })
+        elif t == "qr":       # ruxsatnoma: davomat QR kodi (har o'quvchiga o'ziniki, ctx["qr"])
+            out.update({"color": _color(e.get("color"), "#000000")})
         elif t == "image":
             out.update({"asset": _asset(e.get("asset")),
                         "fit": e.get("fit") if e.get("fit") in ("contain", "cover", "stretch") else "contain",
@@ -446,6 +449,8 @@ def fill(text: str, ctx: dict) -> str:
 
 
 def is_dynamic(el: dict) -> bool:
+    if el.get("type") == "qr":
+        return True
     return el.get("type") == "text" and bool(_PH.search(el.get("text", "")))
 
 
@@ -724,6 +729,20 @@ def _draw_image(canvas: Image.Image, el: dict, W: int, H: int) -> None:
            el["y"] * H / 100 + bh / 2, el.get("rot", 0))
 
 
+def _draw_qr(canvas: Image.Image, el: dict, ctx: dict, W: int, H: int) -> None:
+    """QR — ramka ichida kvadrat, o'rtada. Burilmaydi va shaffof qilinmaydi (kamera o'qishi uchun)."""
+    from . import passqr
+    text = str(ctx.get("qr") or "")
+    if not text:
+        return
+    bw, bh = el["w"] * W / 100, el["h"] * H / 100
+    side = max(21, int(min(bw, bh)))
+    c = el.get("color") or "#000000"
+    rgb = tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
+    tile = passqr.draw(side, text, rgb)
+    _place(canvas, tile, el["x"] * W / 100 + bw / 2, el["y"] * H / 100 + bh / 2, 0)
+
+
 def _draw_element(canvas: Image.Image, el: dict, ctx: dict, W: int, H: int) -> None:
     if el.get("hidden"):
         return
@@ -734,6 +753,8 @@ def _draw_element(canvas: Image.Image, el: dict, ctx: dict, W: int, H: int) -> N
         _draw_image(canvas, el, W, H)
     elif t in ("rect", "ellipse", "line"):
         _draw_shape(canvas, el, W, H)
+    elif t == "qr":
+        _draw_qr(canvas, el, ctx, W, H)
 
 
 # Statik qism keshi: fon + birinchi o'zgaruvchan matngacha bo'lgan elementlar.

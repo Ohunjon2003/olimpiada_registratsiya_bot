@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}QR davomat{% endblock %}
+{% block crumbs %}Davomat · QR skaner{% endblock %}
+{% block head %}<style>
+  .qs-wrap { max-width: 640px; margin: 0 auto; }
+  .qs-top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .qs-top .stat { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-size: 14px; }
+  .qs-top .stat b { font-size: 18px; }
+  .qs-cam { position: relative; background: #0f172a; border-radius: 14px; overflow: hidden; aspect-ratio: 4 / 3; }
+  .qs-cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .qs-cam .frame { position: absolute; inset: 12% 24%; border: 4px solid rgba(255,255,255,.85); border-radius: 18px; pointer-events: none;
+                   box-shadow: 0 0 0 2000px rgba(15,23,42,.35); transition: border-color .12s; }
+  .qs-cam.flash-ok .frame { border-color: #22c55e; } .qs-cam.flash-err .frame { border-color: #ef4444; }
+  .qs-cam.flash-warn .frame { border-color: #f59e0b; }
+  .qs-cam .hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 9px; background: rgba(15,23,42,.6); color: #fff; text-align: center; font-size: 14px; }
+  .qs-cam .off { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: #e2e8f0; text-align: center; padding: 22px; }
+  .qs-res { margin-top: 12px; border-radius: 14px; padding: 14px 16px; min-height: 92px; border: 2px dashed #cbd5e1; background: #f8fafc; color: #475569; }
+  .qs-res .qs-big { font-size: 22px; font-weight: 800; line-height: 1.2; }
+  .qs-res .qs-nm { font-size: 19px; font-weight: 700; margin-top: 4px; color: #0f172a; }
+  .qs-res .qs-meta { font-size: 14px; margin-top: 4px; }
+  .qs-res .qs-seat { font-size: 15px; margin-top: 6px; font-weight: 600; }
+  .qs-res.ok { background: #dcfce7; border: 2px solid #22c55e; color: #14532d; }
+  .qs-res.already { background: #e0f2fe; border: 2px solid #38bdf8; color: #0c4a6e; }
+  .qs-res.warn { background: #fef3c7; border: 2px solid #f59e0b; color: #78350f; }
+  .qs-res.err { background: #fee2e2; border: 2px solid #ef4444; color: #7f1d1d; }
+  .qs-res .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .qs-manual { display: flex; gap: 8px; margin-top: 12px; }
+  .qs-manual input { flex: 1; font-size: 18px; letter-spacing: 2px; }
+  .qs-hist { margin-top: 14px; font-size: 13.5px; }
+  .qs-hist .row { display: flex; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  .qs-hist .row .t { color: var(--muted); min-width: 44px; } .qs-hist .row .n { flex: 1; }
+  .qs-hist .row button { font-size: 12px; padding: 3px 8px; }
+  .qs-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 4px; }
+  .qs-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .qs-head h1 { margin: 0; font-size: 22px; }
+  .qs-opts { margin-bottom: 8px; } .qs-opts summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+  .qs-filters select { width: 100%; }
+</style>{% endblock %}
+{% block content %}
+<div class="qs-wrap">
+  <div class="qs-head"><h1>📷 QR davomat</h1>
+    <a class="btn sm" href="/attendance?round_id={{ round.id }}">📋 Ro'yxat</a></div>
+
+  {% if exam_sessions %}
+  <details class="qs-opts" id="qs-opts" {% if params.get('session_id') or params.get('room_id') %}open{% endif %}>
+  <summary>⚙️ Mening smenam / xonam: <b id="qs-where">hammasi</b></summary>
+  <form class="qs-filters" id="qs-f" onsubmit="return false">
+    <div><label class="small">Mening smenam</label><select name="session_id" id="f-sess"><option value="">Hammasi</option>
+      {% for s in exam_sessions %}<option value="{{ s.id }}" {% if params.get('session_id') == s.id|string %}selected{% endif %}>{{ s.name }} · {{ s.day.strftime('%d.%m') }} {{ s.start_time }}</option>{% endfor %}</select></div>
+    <div><label class="small">Mening xonam</label><select name="room_id" id="f-room"><option value="">Hammasi (kirish eshigi)</option>
+      {% for r in rooms %}<option value="{{ r.id }}" {% if params.get('room_id') == r.id|string %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+  </form>
+  <div class="help">Tanlansa — boshqa joydagi o'quvchi belgilanmaydi, qayerga borishi ko'rsatiladi. Kirish eshigida «Hammasi» qoldiring.</div>
+  </details>
+  {% endif %}
+
+  <div class="qs-top">
+    <span class="stat">✅ Keldi <b id="c-came">{{ counts.came }}</b> / {{ counts.total }}</span>
+    <span class="stat">📷 Siz: <b id="c-me">0</b></span>
+    <button class="btn sm hidden" type="button" id="btn-torch">🔦 Chiroq</button>
+    <button class="btn sm" type="button" id="btn-sound">🔊 Ovoz</button>
+  </div>
+
+  <div class="qs-cam" id="cam">
+    <video id="video" playsinline muted></video>
+    <div class="frame"></div>
+    <div class="hint" id="hint">Kamera ishga tushirilmoqda…</div>
+    <div class="off hidden" id="off"></div>
+  </div>
+
+  <div class="qs-res" id="res"><div class="qs-big">Tayyor</div><div class="qs-meta">Ruxsatnomadagi QR kodni (telefonda yoki qog'ozda) ramkaga tuting — «Keldi» o'zi belgilanadi.</div></div>
+
+  <form class="qs-manual" id="manual" onsubmit="return false">
+    <input type="text" id="m-code" inputmode="numeric" autocomplete="off" placeholder="QR o'qilmasa — ID kiriting">
+    <button class="btn primary" type="submit">Keldi</button>
+  </form>
+
+  <div class="qs-hist card" id="hist"><div class="muted">Hali skaner qilinmadi</div></div>
+
+  <details class="card mt small"><summary><b>Qanday ishlaydi?</b></summary>
+    <ul class="mt-s">
+      <li>Telefonni QR kodga 15–30 sm yaqinlashtiring — ramka <b style="color:#16a34a">yashil</b> bo'lsa, «Keldi» belgilandi.</li>
+      <li><b style="color:#0284c7">Ko'k</b> — allaqachon belgilangan (qayta kirmoqda). <b style="color:#d97706">Sariq</b> — boshqa xona/smena o'quvchisi. <b style="color:#dc2626">Qizil</b> — QR soxta, chetlatilgan yoki boshqa tur.</li>
+      <li>Telefon ekranidagi QR yaltirasa — ekran yorqinligini oshirishni so'rang yoki biroz qiyalab tuting.</li>
+      <li>QR o'qilmasa — ruxsatnomadagi ID ni pastdagi maydonga yozing.</li>
+      <li>Xato belgilansa — tarixdagi «↩ Bekor» tugmasi.</li>
+    </ul>
+  </details>
+</div>
+
+<script>
+(function () {
+  var ROUND = {{ round.id }}, CSRF = {{ csrf|tojson }};
+  var video = document.getElementById('video'), cam = document.getElementById('cam'), hint = document.getElementById('hint');
+  var off = document.getElementById('off'), res = document.getElementById('res'), hist = document.getElementById('hist');
+  var fs = document.getElementById('f-sess'), fr = document.getElementById('f-room');
+  var canvas = document.createElement('canvas'), ctx2d = canvas.getContext('2d', {willReadFrequently: true});
+  var detector = null, busy = false, lastText = '', lastAt = 0, track = null, torchOn = false, me = 0, histN = 0;
+  var sound = true;
+  try { sound = localStorage.getItem('qs-sound') !== '0'; } catch (e) {}
+  // Tanlangan smena/xona — qurilmada eslab qolinadi
+  try {
+    if (fs && !fs.value && localStorage.getItem('qs-sess')) fs.value = localStorage.getItem('qs-sess');
+    if (fr && !fr.value && localStorage.getItem('qs-room')) fr.value = localStorage.getItem('qs-room');
+  } catch (e) {}
+  function where() {
+    var w = document.getElementById('qs-where'); if (!w) return;
+    var a = [];
+    if (fs && fs.value) a.push(fs.options[fs.selectedIndex].text.split(' · ')[0]);
+    if (fr && fr.value) a.push(fr.options[fr.selectedIndex].text);
+    w.textContent = a.length ? a.join(', ') : 'hammasi';
+  }
+  where();
+  [fs, fr].forEach(function (el) { if (el) el.addEventListener('change', function () {
+    try { localStorage.setItem(el === fs ? 'qs-sess' : 'qs-room', el.value); } catch (e) {}
+    where();
+  }); });
+  function setSoundBtn() { document.getElementById('btn-sound').textContent = sound ? '🔊 Ovoz' : '🔇 Ovozsiz'; }
+  setSoundBtn();
+  document.getElementById('btn-sound').addEventListener('click', function () {
+    sound = !sound; setSoundBtn(); try { localStorage.setItem('qs-sound', sound ? '1' : '0'); } catch (e) {}
+  });
+
+  // ---- ovoz va tebranish
+  var actx = null;
+  function beep(kind) {
+    if (navigator.vibrate) navigator.vibrate(kind === 'ok' ? 80 : [120, 80, 120]);
+    if (!sound) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      var tones = {ok: [[880, 0, .12]], already: [[660, 0, .1], [660, .14, .1]], warn: [[440, 0, .15], [440, .2, .15]], err: [[220, 0, .3]]}[kind];
+      tones.forEach(function (t) {
+        var o = actx.createOscillator(), g = actx.createGain();
+        o.frequency.value = t[0]; o.type = 'sine'; g.gain.value = .18;
+        o.connect(g); g.connect(actx.destination);
+        o.start(actx.currentTime + t[1]); o.stop(actx.currentTime + t[1] + t[2]);
+      });
+    } catch (e) {}
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+
+  // ---- natija
+  var CLS = {ok: 'ok', already: 'already', wrong_place: 'warn', wrong_round: 'err', not_eligible: 'err', invalid: 'err'};
+  var TITLE = {ok: '✅ KELDI', already: 'ℹ️ Allaqachon belgilangan', wrong_place: '⚠️ Boshqa joy', wrong_round: '⛔ Boshqa tur', not_eligible: '⛔ Kiritilmaydi', invalid: '⛔ Noto\'g\'ri QR'};
+  function show(d, payload) {
+    var cls = CLS[d.kind] || 'err';
+    res.className = 'qs-res ' + cls;
+    var h = '<div class="qs-big">' + TITLE[d.kind] + '</div>';
+    if (d.name) h += '<div class="qs-nm">' + esc(d.name) + '</div><div class="qs-meta">ID <b>' + esc(d.code) + '</b>' +
+      (d.grade ? ' · ' + esc(d.grade) + '-sinf' : '') + (d.school ? ' · ' + esc(d.school) : '') + '</div>';
+    if (d.seat) h += '<div class="qs-seat">🪑 ' + esc(d.seat) + '</div>';
+    if (d.kind !== 'ok' && d.msg) h += '<div class="qs-meta">' + esc(d.msg) + '</div>';
+    if (d.kind === 'wrong_place') h += '<div class="acts"><button class="btn sm" type="button" id="btn-force">Baribir «Keldi» belgilash</button></div>';
+    res.innerHTML = h;
+    cam.className = 'qs-cam flash-' + (cls === 'ok' || cls === 'already' ? 'ok' : (cls === 'warn' ? 'warn' : 'err'));
+    setTimeout(function () { cam.className = 'qs-cam'; }, 900);
+    beep(d.kind === 'ok' ? 'ok' : (d.kind === 'already' ? 'already' : (cls === 'warn' ? 'warn' : 'err')));
+    if (d.kind === 'wrong_place') document.getElementById('btn-force').addEventListener('click', function () {
+      payload.force = '1'; send(payload);
+    });
+    if (d.counts) document.getElementById('c-came').textContent = d.counts.came;
+    if (d.kind === 'ok') { me++; document.getElementById('c-me').textContent = me; }
+    addHist(d);
+  }
+  function addHist(d) {
+    if (!histN) hist.innerHTML = '';
+    histN++;
+    var row = document.createElement('div'); row.className = 'row';
+    var icon = {ok: '✅', already: 'ℹ️', wrong_place: '⚠️'}[d.kind] || '⛔';
+    row.innerHTML = '<span class="t">' + new Date().toTimeString().slice(0, 5) + '</span><span>' + icon + '</span><span class="n">' +
+      esc(d.name || d.msg) + (d.code ? ' <span class="muted">· ' + esc(d.code) + '</span>' : '') + '</span>';
+    if (d.kind === 'ok' && d.pid) {
+      var b = document.createElement('button'); b.className = 'btn sm'; b.type = 'button'; b.textContent = '↩ Bekor';
+      b.addEventListener('click', function () {
+        if (!confirm(d.name + ' — «Keldi» belgisi olib tashlansinmi?')) return;
+        var f = new FormData(); f.append('participant_id', d.pid); f.append('round_id', ROUND); f.append('value', '');
+        fetch('/attendance/mark', {method: 'POST', body: f, headers: {'X-CSRF-Token': CSRF}}).then(function (r) {
+          if (r.ok) { b.remove(); row.style.opacity = .5; row.querySelector('.n').insertAdjacentHTML('beforeend', ' <span class="muted">(bekor qilindi)</span>');
+            var c = document.getElementById('c-came'); c.textContent = Math.max(0, (+c.textContent || 0) - 1); }
+        });
+      });
+      row.appendChild(b);
+    }
+    hist.insertBefore(row, hist.firstChild);
+    while (hist.children.length > 30) hist.removeChild(hist.lastChild);
+  }
+
+  function send(payload) {
+    busy = true;
+    var f = new FormData();
+    f.append('round_id', ROUND);
+    if (fs && fs.value) f.append('session_id', fs.value);
+    if (fr && fr.value) f.append('room_id', fr.value);
+    Object.keys(payload).forEach(function (k) { f.append(k, payload[k]); });
+    fetch('/attendance/scan', {method: 'POST', body: f, headers: {'X-CSRF-Token': CSRF}})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { show(d, payload); })
+      .catch(function (e) { show({kind: 'invalid', msg: 'Server bilan aloqa yo\'q (' + e.message + '). Internetni tekshiring.'}, payload); })
+      .finally(function () { busy = false; lastAt = Date.now(); });
+  }
+
+  // ---- QR o'qish: BarcodeDetector (Android Chrome) yoki jsQR (iPhone va boshqalar)
+  function decode() {
+    if (detector) return detector.detect(video).then(function (r) { return r.length ? r[0].rawValue : null; });
+    var vw = video.videoWidth, vh = video.videoHeight, s = Math.min(vw, vh) * 0.8;   // markazdagi kvadrat
+    var sz = Math.min(640, Math.round(s));
+    canvas.width = sz; canvas.height = sz;
+    ctx2d.drawImage(video, (vw - s) / 2, (vh - s) / 2, s, s, 0, 0, sz, sz);
+    var img = ctx2d.getImageData(0, 0, sz, sz);
+    var r = window.jsQR(img.data, sz, sz, {inversionAttempts: 'attemptBoth'});
+    return Promise.resolve(r ? r.data : null);
+  }
+  function tick() {
+    if (busy || video.readyState < 2 || document.hidden) return;
+    busy = true;
+    decode().then(function (text) {
+      busy = false;
+      if (!text) return;
+      text = text.trim();
+      // Bir xil QR — 4 soniya ichida qayta yuborilmaydi (telefon QR ustida turib qolsa)
+      if (text === lastText && Date.now() - lastAt < 4000) return;
+      lastText = text;
+      send({text: text});
+    }).catch(function () { busy = false; });
+  }
+  function loadJsQR(cb) {
+    if (window.jsQR) return cb();
+    var s = document.createElement('script'); s.src = '/static/vendor/jsQR.min.js?v=1.4.0'; s.onload = cb;
+    s.onerror = function () { hint.textContent = 'QR o\'quvchi yuklanmadi — sahifani yangilang'; };
+    document.head.appendChild(s);
+  }
+  function startLoop() {
+    hint.textContent = 'QR kodni ramka ichiga tuting';
+    setInterval(tick, 120);
+  }
+  function startCamera() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || !window.isSecureContext) {
+      off.classList.remove('hidden'); hint.classList.add('hidden');
+      off.innerHTML = 'Kamera faqat <b>HTTPS</b> (domen) orqali ishlaydi.<br>Hozircha pastdagi maydonga ID yozib belgilang.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}}})
+      .then(function (stream) {
+        video.srcObject = stream; video.play();
+        track = stream.getVideoTracks()[0];
+        var caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) document.getElementById('btn-torch').classList.remove('hidden');
+        if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) track.applyConstraints({advanced: [{focusMode: 'continuous'}]}).catch(function () {});
+        var useNative = 'BarcodeDetector' in window && BarcodeDetector.getSupportedFormats;
+        if (useNative) {
+          BarcodeDetector.getSupportedFormats().then(function (f) {
+            if (f.indexOf('qr_code') >= 0) { detector = new BarcodeDetector({formats: ['qr_code']}); startLoop(); }
+            else loadJsQR(startLoop);
+          }).catch(function () { loadJsQR(startLoop); });
+        } else loadJsQR(startLoop);
+      })
+      .catch(function (e) {
+        var why = {NotAllowedError: 'Kameraga ruxsat berilmadi — brauzerda manzil yonidagi qulf belgisi → Kamera → Ruxsat.',
+                   NotFoundError: 'Kamera topilmadi.', NotReadableError: 'Kamera boshqa ilovada band — uni yopib, sahifani yangilang.'}[e.name] || ('Kamerani ochib bo\'lmadi (' + e.name + ').');
+        off.classList.remove('hidden'); hint.classList.add('hidden');
+        off.innerHTML = esc(why) + '<br>Hozircha pastdagi maydonga ID yozing.';
+      });
+  }
+  document.getElementById('btn-torch').addEventListener('click', function () {
+    if (!track) return; torchOn = !torchOn; track.applyConstraints({advanced: [{torch: torchOn}]}).catch(function () {});
+  });
+  document.getElementById('manual').addEventListener('submit', function () {
+    var inp = document.getElementById('m-code'), v = inp.value.trim();
+    if (!v) return;
+    send({code: v}); inp.value = '';
+  });
+  startCamera();
+})();
+</script>
+{% endblock %}

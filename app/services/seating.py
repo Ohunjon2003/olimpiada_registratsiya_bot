@@ -34,7 +34,7 @@ from ..config import config
 from ..models import (Building, ExamSession, Participant, Room, Round,
                       SeatAssignment)
 from ..utils import by_lang, lat2cyr, now_utc
-from . import ranking
+from . import passqr, ranking
 from . import settings as st
 
 MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr",
@@ -893,6 +893,8 @@ def build_pass_context(p: Participant, a: SeatAssignment) -> dict:
         "seat_side": ("chap" if a.seat == 1 else "o'ng") if room.seats_per_desk == 2 else str(a.seat),
         "seat_no": str(seat_number(room, (a.row, a.desk, a.seat))),
         "seat_text": seat_text(room, a, lang),
+        "qr": passqr.make(p.id, a.round_id),       # davomat QR kodi (imzolangan)
+        "lang": lang,
     }
 
 

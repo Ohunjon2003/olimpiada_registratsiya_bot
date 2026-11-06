@@ -60,6 +60,7 @@ Bot va web bitta jarayonda ishlaydi, baza — SQLite (bitta fayl).
 - **Xabar yuborish**: filtr bo'yicha, rasm bilan, **rejalashtirilgan** (eslatmalar uchun), natijalarni va sertifikatlarni hammaga yuborish. Botni bloklaganlar belgilanadi.
 - Kanallar, nizom, maktablar (ro'yxatni birdaniga qo'shish), sinflar, fanlar, bloklar, turlar, qo'shimcha savollar — hammasi paneldan.
 - **Davomat** (🙋): olimpiada kuni kirishda «✅ Keldi / ❌ Kelmadi». Familiya/ism/ID ning birinchi harflarini yozish bilan ro'yxat darhol chiqadi (Enter shart emas; bitta o'quvchi qolsa Enter uni «Keldi» qiladi). Sinf tugmalari, maktab/fan/holat filtrlari, jonli hisoblagich. Ishtirokchilar ro'yxati, ball kiritish va ommaviy xabarda «kelganlar / kelmaganlar» filtri. Hakamlarga ruxsat — sozlamada.
+- **QR davomat** (📷): har ruxsatnomada o'quvchining **imzolangan QR kodi** (soxta QR ishlamaydi). Kirishda nazoratchi telefonda «📷 QR davomat»ni ochib QR ni (telefon ekranida yoki qog'ozda) ramkaga tutadi — **«Keldi» o'zi belgilanadi**, ovoz va rang bilan: yashil — keldi, ko'k — allaqachon, sariq — boshqa xona/smena (qayerga borishi ko'rsatiladi), qizil — soxta/chetlatilgan/boshqa tur. «Mening smenam/xonam» tanlansa, boshqa joydagi o'quvchi belgilanmaydi. QR o'qilmasa — ID ni qo'lda yozish; xato belgilansa — «↩ Bekor». Android'da telefonning o'z QR o'quvchisi, iPhone'da jsQR ishlaydi. QR 1-versiya (21×21 katak) — eski kamera ham tez o'qiydi. Dizaynerda «▦ QR» elementi; QR joyi yo'q eski shablonda QR ruxsatnoma pastiga avtomatik qo'shiladi.
 - **E'tirozlar** (⚖️): natija e'lon qilingach o'quvchi botdan fan tanlab e'tiroz yozadi (har fan bo'yicha bitta, muddat bilan). Admin panelda qabul qiladi/rad etadi — javob o'quvchiga botda boradi.
 - **Telegram xabarnomalar** (🔔): admin o'z Telegram'ini ulaydi; bot har N-o'quvchi, xatolar, yangi e'tirozlar haqida xabar beradi, **avtomatik zaxirani Telegram'ga yuboradi**. Botda `/stat` — tezkor statistika.
 - **Arxiv va tozalash** (🗄): hamma narsa bitta Excel'da (xulosa, ishtirokchilar, har fan/blok reytingi, barcha natijalar, davomat, e'tirozlar). Yangi olimpiada uchun eski ma'lumotlarni tozalash (oldin avtomatik zaxira, so'z + parol bilan tasdiqlash).
@@ -199,7 +200,7 @@ Terminalda har bir kelgan xabar `Bot ← <id> (xabar: ...)` ko'rinishida yozilad
 
 ### Olimpiada kuni
 - Umumiy sozlamalarda **zaxira oralig'ini 1 soat** qiling.
-- Kirishda **🙋 Davomat** sahifasida «Keldi»ni belgilang (bir nechta kompyuter/telefondan bir vaqtda mumkin).
+- Kirishda **📷 QR davomat**: ruxsatnomadagi QR ni telefon bilan skaner qiling — «Keldi» o'zi belgilanadi (bir nechta telefondan bir vaqtda mumkin). QR yo'q bo'lsa — **🙋 Davomat** sahifasida ism/ID bilan.
 - Hakamlar «Ball kiritish»da **Davomat → Faqat kelganlar** filtrini tanlaydi.
 - Eslatmani oldindan rejalashtiring: «Xabar yuborish» → vaqt belgilang.
 - Hakamlar «Ball kiritish» bo'limida ishlaydi; bosh sahifada har fan bo'yicha jarayon ko'rinadi.

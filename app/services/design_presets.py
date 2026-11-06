@@ -189,12 +189,16 @@ def pass_default() -> dict:
         els.append(T(value, 33, y, 59, 4.6, 3.2, "#0f172a", "montserrat", True, "left", name=label))
         els.append(L(8, y + 5.0, 84, "#e5e7eb", 0.15))
         y += 5.4
+    qw = 24.0                                   # QR kengligi (sahifa %): A5 da ≈ 36 mm
+    qh = qw * 148 / 210                          # kvadrat bo'lishi uchun (A5 tik: 148×210 mm)
     els += [
-        R(6, y + 1.2, 88, 11.5, fill="#fef3c7", stroke="#fcd34d", sw=0.2, radius=8),
+        R(6, y + 1.0, 88 - qw - 3, qh, fill="#fef3c7", stroke="#fcd34d", sw=0.2, radius=8),
         T("Eslatma: ruchka va shaxsingizni tasdiqlovchi hujjat (metrika yoki ID karta) olib keling. "
           "Kelish vaqtidan kechikmang. Telefon va qo'shimcha qog'oz bilan kirish mumkin emas.",
-          9, y + 2.0, 82, 10, 2.6, "#78350f", "montserrat", align="left", name="Eslatma"),
-        T("Ruxsatnomani telefoningizda yoki chop etib olib keling", 6, 95, 88, 3.5, 2.2, "#94a3b8", "montserrat"),
+          9, y + 1.8, 88 - qw - 9, qh - 1.6, 2.5, "#78350f", "montserrat", align="left", name="Eslatma"),
+        {"type": "qr", "x": 94 - qw, "y": y + 1.0, "w": qw, "h": qh, "color": "#000000", "name": "Davomat QR kodi"},
+        T("Kirishda QR kodni ko'rsating · ruxsatnomani telefonda yoki chop etib olib keling",
+          6, 97, 88, 3.0, 2.0, "#94a3b8", "montserrat", name="Pastki yozuv"),
     ]
     return {"page": _page("A5P"), "bg": {"type": "color", "color": "#ffffff"}, "els": _named(els)}
 

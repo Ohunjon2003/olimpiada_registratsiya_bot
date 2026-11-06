@@ -228,6 +228,7 @@
       transform: el.rot ? 'rotate(' + el.rot + ' ' + b.cx + ' ' + b.cy + ')' : null}, layerEls);
     if (el.type === 'text') drawText(el, g, b, ctx);
     else if (el.type === 'image') drawImage(el, g, b);
+    else if (el.type === 'qr') drawQr(el, g, b);
     else if (el.type === 'rect') {
       var sw = (el.sw || 0) * W / 100, st = el.stroke && sw > 0;
       var r = Math.max(0, (el.radius || 0) / 100 * Math.min(b.w, b.h) / 2 - (st ? sw / 2 : 0));
@@ -275,6 +276,18 @@
     }
     if (el.stroke) lines(hex6(el.stroke.color), true);
     lines(hex6(el.color), false);
+  }
+  // Ruxsatnoma: davomat QR kodi. Tahrirlagichda namuna QR; chop etishda har o'quvchiga o'ziniki chiziladi.
+  var QR_SAMPLE = ['111111100100101111111','100000101110001000001','101110100100101011101','101110100010101011101','101110101111101011101','100000100111001000001','111111101010101111111','000000000000000000000','101010100100100010010','000100000111001011000','000100101011001110101','010001001011100111100','101101101001001100011','000000001010011010110','111111100010101010011','100000100010000111001','101110101000110110111','101110100111011001110','101110101011001110001','100000100001110001111','111111101101001010101'];
+  function drawQr(el, g, b) {
+    var side = Math.min(b.w, b.h), n = QR_SAMPLE.length + 8, cell = side / n;
+    var x0 = b.x + (b.w - side) / 2, y0 = b.y + (b.h - side) / 2, d = '';
+    svg('rect', {x: x0, y: y0, width: side, height: side, fill: '#ffffff'}, g);
+    QR_SAMPLE.forEach(function (row, i) {
+      for (var j = 0; j < row.length; j++) if (row[j] === '1')
+        d += 'M' + r2(x0 + (j + 4) * cell) + ' ' + r2(y0 + (i + 4) * cell) + 'h' + r2(cell) + 'v' + r2(cell) + 'h' + r2(-cell) + 'z';
+    });
+    svg('path', {d: d, fill: hex6(el.color || '#000000'), 'shape-rendering': 'crispEdges'}, g);
   }
   function drawImage(el, g, b) {
     var par = {contain: 'xMidYMid meet', cover: 'xMidYMid slice', stretch: 'none'}[el.fit || 'contain'];
@@ -406,7 +419,7 @@
     var corner = hx !== 0 && hy !== 0;
     var nw = Math.max(4, b.w + hx * lx), nh = Math.max(4, b.h + hy * ly);
     // Burchakdan: rasm va matn nisbati saqlanadi (Shift — erkin); shakl — Shift bilan saqlanadi
-    var keepAspect = corner && ((el.type === 'image' || el.type === 'text') ? !keep : keep);
+    var keepAspect = corner && ((el.type === 'image' || el.type === 'text' || el.type === 'qr') ? !keep : keep);
     if (keepAspect) {
       var k = Math.max(nw / b.w, nh / b.h);
       nw = b.w * k; nh = b.h * k;
@@ -489,6 +502,7 @@
     if (type === 'rect') return Object.assign(base, {fill: '#dbeafe', stroke: '', sw: 0.2, radius: 0, h: 30 * W / H * 0.6});
     if (type === 'ellipse') { var s = 14; return Object.assign(base, {fill: '#fde68a', stroke: '', sw: 0.2, x: 43, y: 40, w: s, h: s * W / H}); }
     if (type === 'line') return Object.assign(base, {fill: '', stroke: '#111827', sw: 0.15, x: 30, y: 50, w: 40, h: 2});
+    if (type === 'qr') { var q = 24; return Object.assign(base, {name: 'Davomat QR kodi', color: '#000000', x: 70, y: 74, w: q, h: q * W / H}); }
     return base;
   }
   function add(el) {
@@ -589,7 +603,7 @@
     var el = selected();
     if (!el) { renderPage(); return; }
     var h = '';
-    var typeName = {text: '🅣 Matn', image: '🖼 Rasm', rect: '▭ To\'rtburchak', ellipse: '◯ Doira', line: '━ Chiziq'}[el.type];
+    var typeName = {text: '🅣 Matn', image: '🖼 Rasm', rect: '▭ To\'rtburchak', ellipse: '◯ Doira', line: '━ Chiziq', qr: '▦ QR kod'}[el.type];
     h += '<div class="dz-ptitle"><b>' + typeName + '</b><span class="muted small">' + esc(el.name || '') + '</span></div>';
     if (el.locked) h += '<div class="alert info small">🔒 Qulflangan. Tahrirlash uchun qulfni oching.</div>';
     if (el.type === 'text') {
@@ -628,6 +642,10 @@
         '<option value="cover"' + (el.fit === 'cover' ? ' selected' : '') + '>To\'ldirish (qirqiladi)</option><option value="stretch"' + (el.fit === 'stretch' ? ' selected' : '') + '>Cho\'zish</option></select></div>';
       h += num('Burchak yumaloqligi', 'radius', el.radius || 0, 1, 0, 100, '%');
       h += '<div class="help mb">Logo, muhr va imzo uchun foni shaffof PNG yuklang.</div>';
+    } else if (el.type === 'qr') {
+      h += '<div class="grid g2">' + color('Rang', 'color', el.color || '#000000') + '</div>';
+      h += '<div class="help mb">Davomat QR kodi — har o\'quvchiga o\'ziniki chiqadi (bu yerda namuna). Nazoratchi telefonda skaner qilsa, «Keldi» belgilanadi.<br>' +
+        '<b>Kamida 30 mm</b> qiling, to\'q rangda va oq fonda qoldiring — shunda kamera tez o\'qiydi.</div>';
     } else if (el.type === 'line') {
       h += '<div class="grid g2">' + color('Rang', 'stroke', el.stroke) + num('Qalinlik', 'sw', pctToMM(el.sw, 0), 0.05, 0.05, 50, 'mm') + '</div>';
     } else {
@@ -712,8 +730,8 @@
     var h = '';
     for (var i = design.els.length - 1; i >= 0; i--) {
       var el = design.els[i];
-      var label = el.name || (el.type === 'text' ? (el.text || '').slice(0, 40) : {image: 'Rasm', rect: 'To\'rtburchak', ellipse: 'Doira', line: 'Chiziq'}[el.type]);
-      var ico = {text: '🅣', image: '🖼', rect: '▭', ellipse: '◯', line: '━'}[el.type];
+      var label = el.name || (el.type === 'text' ? (el.text || '').slice(0, 40) : {image: 'Rasm', rect: 'To\'rtburchak', ellipse: 'Doira', line: 'Chiziq', qr: 'QR kod'}[el.type]);
+      var ico = {text: '🅣', image: '🖼', rect: '▭', ellipse: '◯', line: '━', qr: '▦'}[el.type];
       h += '<div class="dz-layer' + (el.id === sel ? ' on' : '') + (el.hidden ? ' off' : '') + '" data-layer="' + el.id + '">' +
         '<span class="ico">' + ico + '</span><span class="nm">' + esc(label) + '</span>' +
         '<button type="button" data-lact="up" title="Yuqoriga">▲</button><button type="button" data-lact="down" title="Pastga">▼</button>' +
@@ -828,6 +846,11 @@
       'add-rect': function () { add(defaults('rect')); },
       'add-ellipse': function () { add(defaults('ellipse')); },
       'add-line': function () { add(defaults('line')); },
+      'add-qr': function () {
+        var ex = design.els.filter(function (e) { return e.type === 'qr'; })[0];
+        if (ex) { select(ex.id); return; }        // bitta QR yetarli
+        add(defaults('qr'));
+      },
       'undo': undo, 'redo': redo,
       'zoom-in': function () { setZoom(zoom * 1.25); }, 'zoom-out': function () { setZoom(zoom / 1.25); },
       'zoom-fit': function () { fitView(true); },

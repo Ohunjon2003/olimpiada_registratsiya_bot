@@ -322,6 +322,11 @@ document.querySelectorAll('input[name=per_shift]').forEach(gradeCount);
     {% if pass_tpl %}
       <a href="/admin/certificates/{{ pass_tpl.id }}"><img src="/admin/certificates/{{ pass_tpl.id }}/preview.png?w=600&v={{ pass_tpl.design_json|length }}" alt="" style="max-width:100%;max-height:360px;border:1px solid var(--line)"></a>
       <div class="btns mt-s"><a class="btn" href="/admin/certificates/{{ pass_tpl.id }}">✏️ Dizaynni o'zgartirish</a></div>
+      {% if '"qr"' in pass_tpl.design_json %}
+      <div class="help mt-s">▦ Davomat QR kodi dizayn ichida. Olimpiada kuni nazoratchi «📷 QR davomat»da skaner qiladi — «Keldi» o'zi belgilanadi.</div>
+      {% else %}
+      <div class="alert info small mt-s">▦ <b>Davomat QR kodi</b> ruxsatnoma <b>pastiga avtomatik qo'shiladi</b> (rasmda ko'rinib turibdi). Uni dizayn ichiga joylash uchun: «✏️ Dizaynni o'zgartirish» → «▦ QR» tugmasi (yoki «🎨 Tayyor dizayn» → «Ruxsatnoma (A5)»).</div>
+      {% endif %}
     {% else %}<div class="alert warn">Faol ruxsatnoma shabloni yo'q. «🎓 Sertifikatlar» → «🎫 Ruxsatnoma» bo'limida yarating va faol qiling.</div>{% endif %}
   </div>
   <form method="post" action="/admin/seating/pass-settings" class="card">

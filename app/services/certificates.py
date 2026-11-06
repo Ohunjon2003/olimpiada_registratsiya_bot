@@ -95,6 +95,9 @@ AWARD_TEXT_DEFAULTS = {
 def sample_context(kind: str = "certificate") -> dict:
     ph = PASS_PH if kind == "pass" else CERT_PH
     ctx = {k: v[1] for k, v in ph.items()}
+    if kind == "pass":
+        from . import passqr
+        ctx["qr"] = passqr.make(0, 0)       # namuna QR (davomatda «noto'g'ri o'quvchi» deb chiqadi)
     ctx["olympiad"] = st.get("olympiad_name")
     ctx["date"] = datetime.now(config.TZ).strftime("%d.%m.%Y")
     return ctx
@@ -195,7 +198,50 @@ def save_design(tpl: CertificateTemplate, design: dict) -> None:
 
 
 def render_template(tpl: CertificateTemplate, ctx: dict) -> Image.Image:
-    return dz.render(load_design(tpl), ctx)
+    design = load_design(tpl)
+    img = dz.render(design, ctx)
+    if tpl.kind == "pass" and ctx.get("qr") and not has_qr(design):
+        img = add_qr_strip(img, ctx)        # eski shablonda QR joyi yo'q — pastiga QR qatori qo'shiladi
+    return img
+
+
+def has_qr(design: dict) -> bool:
+    return any(e.get("type") == "qr" and not e.get("hidden") for e in design.get("els", []))
+
+
+def add_qr_strip(img: Image.Image, ctx: dict) -> Image.Image:
+    """Ruxsatnoma pastiga davomat QR kodi qatori (dizaynga tegmasdan, hech narsani yopmaydi)."""
+    from PIL import ImageDraw
+    from . import passqr
+    W, H = img.size
+    q = int(W * 0.30)                       # A5 da ≈ 44 mm — telefon kamerasi 1 metrdan ham o'qiydi
+    pad = int(W * 0.04)
+    strip = q + 2 * pad
+    out = Image.new("RGB", (W, H + strip), "white")
+    out.paste(img, (0, 0))
+    d = ImageDraw.Draw(out)
+    d.line([(pad, H + 2), (W - pad, H + 2)], fill=(203, 213, 225), width=max(2, W // 400))
+    out.paste(passqr.draw(q, ctx["qr"]).convert("RGB"), (W - pad - q, H + pad))
+    path = dz.font_path("montserrat", True)
+    path2 = dz.font_path("montserrat", False)
+    from PIL import ImageFont
+    f1 = ImageFont.truetype(str(path), max(12, int(W * 0.040)))
+    f2 = ImageFont.truetype(str(path2), max(10, int(W * 0.027)))
+    f3 = ImageFont.truetype(str(path), max(14, int(W * 0.075)))
+    x, y = pad, H + pad + int(q * 0.06)
+    lines = ["Kirishda nazoratchiga ko'rsating:", "telefon ekranida yoki qog'ozda.", "QR kodni buklamang va chizmang."]
+    title = "DAVOMAT QR KODI"
+    if ctx.get("lang") == "cyr":
+        from ..utils import lat2cyr
+        lines, title = [lat2cyr(x) for x in lines], lat2cyr(title)
+    d.text((x, y), title, font=f1, fill=(30, 58, 138))
+    y += int(W * 0.065)
+    for line in lines:
+        d.text((x, y), line, font=f2, fill=(71, 85, 105))
+        y += int(W * 0.040)
+    if ctx.get("code"):
+        d.text((x, y + int(W * 0.015)), f"ID {ctx['code']}", font=f3, fill=(15, 23, 42))
+    return out
 
 
 def template_dpi(tpl: CertificateTemplate) -> int:
