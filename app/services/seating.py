@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import config
 from ..models import (Building, ExamSession, Participant, Room, Round,
                       SeatAssignment)
-from ..utils import by_lang, lat2cyr, now_utc
+from ..utils import by_lang, grade_num, lat2cyr, now_utc
 from . import passqr, ranking
 from . import settings as st
 
@@ -481,8 +481,8 @@ async def active_rooms(session: AsyncSession) -> list[Room]:
 
 def grade_label(name: str) -> str:
     """«7» → «7-sinf» («7-sinf» o'zgarmaydi)."""
-    name = (name or "").strip()
-    return name if "sinf" in name.lower() else f"{name}-sinf"
+    from ..utils import grade_label as _gl
+    return _gl(name)
 
 
 async def round_sessions(session: AsyncSession, round_id: int) -> list[ExamSession]:
@@ -878,7 +878,7 @@ def build_pass_context(p: Participant, a: SeatAssignment) -> dict:
     return {
         "full_name": p.full_name, "first_name": p.first_name, "last_name": p.last_name,
         "school": by_lang(p.school.name, p.school.name_cyr, lang) if p.school else "",
-        "grade": by_lang(p.grade.name, p.grade.name_cyr, lang) if p.grade else "",
+        "grade": grade_num(by_lang(p.grade.name, p.grade.name_cyr, lang)) if p.grade else "",
         "code": p.code or "", "olympiad": st.get("olympiad_name"),
         "round": by_lang(rnd.name, rnd.name_cyr, lang) if rnd else "",
         "date": datetime.now(config.TZ).strftime("%d.%m.%Y"),
@@ -941,17 +941,20 @@ async def send_pass(bot, session: AsyncSession, p: Participant, changed: bool = 
     jpg = await asyncio.to_thread(dz.to_jpeg, img)
     pdf = await asyncio.to_thread(dz.to_pdf, img, certs.template_dpi(tpl))
     caption = pass_caption(p, ctx, a.room.building.map_url if a.room and a.room.building else "")
+    done = set()          # qayta urinishda yuborilganini takrorlamaslik (ikki marta rasm bormasin)
     for attempt in range(3):
         try:
-            if changed:
+            if changed and "msg" not in done:
                 await bot.send_message(p.telegram_id, t("pass_changed", p.lang))
-            await bot.send_photo(p.telegram_id, BufferedInputFile(jpg, f"ruxsatnoma_{p.code}.jpg"), caption=caption)
+                done.add("msg")
+            if "photo" not in done:
+                await bot.send_photo(p.telegram_id, BufferedInputFile(jpg, f"ruxsatnoma_{p.code}.jpg"), caption=caption)
+                done.add("photo")
             await bot.send_document(p.telegram_id, BufferedInputFile(pdf, f"ruxsatnoma_{p.code}.pdf"))
             a.pass_sent_at = now_utc()
             return "ok"
         except TelegramRetryAfter as e:
             await asyncio.sleep(e.retry_after + 1)
-            changed = False
         except TelegramForbiddenError:
             p.bot_blocked = True
             return "blocked"

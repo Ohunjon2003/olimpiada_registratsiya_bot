@@ -72,6 +72,19 @@
       {% else %}<div class="muted">Joy biriktirilmagan. «🪑 Joylashtirish» sahifasida taqsimlang.</div>{% endif %}
     </div>
     <div class="card">
+      <h2>🎟 Voucher</h2>
+      {% if voucher %}
+        <div><a href="/v/{{ voucher.serial }}" target="_blank"><code>{{ voucher.serial }}</code></a> · <b>{{ "{:,}".format(voucher.amount).replace(",", " ") }} so'm</b> ·
+          {{ {'active': '✅ Amalda', 'redeemed': '☑️ Ishlatilgan', 'cancelled': '⛔ Bekor qilingan'}[voucher.status] }}</div>
+        <div class="small muted mt-s">Botga: {{ ('yuborilgan ' ~ (voucher.sent_at|dt)) if voucher.sent_at else 'hali yuborilmagan' }}{% if voucher.redeemed_at %} · ishlatilgan {{ voucher.redeemed_at|dt }} ({{ voucher.redeemed_by }}){% endif %}</div>
+        <div class="btns mt-s">
+          <a class="btn sm" href="/admin/vouchers/{{ voucher.id }}.png" target="_blank">👁 Ko'rish</a>
+          <a class="btn sm" href="/admin/vouchers/{{ voucher.id }}.pdf">⬇️ PDF</a>
+          {% if voucher.status == 'active' %}<form method="post" action="/admin/vouchers/{{ voucher.id }}/send" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm primary">🎟 Botga yuborish</button></form>{% endif %}
+        </div>
+      {% else %}<div class="muted">Voucher berilmagan. «🎟 Voucherlar» sahifasida beriladi.</div>{% endif %}
+    </div>
+    <div class="card">
       <h2>Sertifikatlar</h2>
       {% if cert_items %}
         <div class="btns">{% for it in cert_items %}<a class="btn sm" href="/admin/participants/{{ p.id }}/certificate/{{ loop.index0 }}">{{ '🏆' if it.prize else '🎓' }} {{ it.template.name }} — {{ it.title }}{% if it.prize %} ({{ it.prize }}-o'rin){% endif %}</a>{% endfor %}</div>

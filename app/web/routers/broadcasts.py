@@ -24,7 +24,7 @@ from ..core import (Page, client_ip, flash, int_or_none, render,
 router = APIRouter(prefix="/admin/broadcasts", dependencies=[Depends(verify_csrf)])
 
 FILTER_KEYS = ("school_id", "grade_id", "subject_id", "lang", "status", "attendance")
-KINDS = {"message": "Xabar", "results": "Natijalar", "certificates": "Sertifikatlar", "passes": "Ruxsatnomalar", "sheets": "Tekshirilgan titullar"}
+KINDS = {"message": "Xabar", "results": "Natijalar", "certificates": "Sertifikatlar", "passes": "Ruxsatnomalar", "sheets": "Tekshirilgan titullar", "vouchers": "Voucherlar"}
 
 
 def _filters(form) -> dict:
@@ -114,16 +114,22 @@ async def create(request: Request, user: User = Depends(require_admin),
             photo_path = str(path)
         if photo_path and len(text) > 1024:
             errors.append("Rasmli xabar matni 1024 belgidan oshmasin (Telegram cheklovi)")
-    if kind == "results" and not st.get("results_published"):
-        errors.append("Avval natijalarni e'lon qiling (Reyting sahifasida)")
     if kind == "certificates" and not (st.get("results_published") and st.get("certificates_enabled")):
         errors.append("Natijalar e'lon qilingan va sertifikatlar yoqilgan bo'lishi kerak")
     if errors:
         for e in errors:
             flash(request, e, "error")
         return RedirectResponse("/admin/broadcasts", 303)
+    flt = await _filters_with_round(session, form)
+    if kind == "results":
+        if form.get("with_sheets"):
+            flt["with_sheets"] = "1"
+        if not st.get("results_published"):     # natijalarni yuborish = e'lon qilish (aniq admin harakati)
+            await st.set_many(session, {"results_published": True})
+            audit.log(session, user, "update", "settings", "results_published", "Natijalar e'lon qilindi",
+                      ip=client_ip(request))
     b = Broadcast(kind=kind, text=text, text_cyr=text_cyr, photo_path=photo_path,
-                  filters_json=json.dumps(await _filters_with_round(session, form)), scheduled_at=when,
+                  filters_json=json.dumps(flt), scheduled_at=when,
                   round_id=int_or_none(form.get("round_id")), created_by=user.username)
     session.add(b)
     await session.flush()
@@ -134,16 +140,60 @@ async def create(request: Request, user: User = Depends(require_admin),
     return RedirectResponse("/admin/broadcasts", 303)
 
 
+async def _quick_sheets(request: Request, user: User, session: AsyncSession, form) -> RedirectResponse:
+    """Tekshirilgan titullarni ALOHIDA yuborish (natijalar e'lon qilingandan keyin, kerak bo'lsa)."""
+    if not st.get("results_published"):
+        flash(request, "Avval natijalarni e'lon qilib yuboring — titulda ball ko'rinadi", "error")
+        return RedirectResponse("/admin/ranking", 303)
+    rid = int_or_none(form.get("round_id"))
+    if not rid:
+        flash(request, "Tur tanlanmagan", "error")
+        return RedirectResponse("/admin/ranking", 303)
+    flt = {"sheet_round": str(rid)}
+    if int_or_none(form.get("subject_id")):
+        flt["sheet_subject"] = str(int(form["subject_id"]))
+    if form.get("only_unsent"):
+        flt["sheet_unsent"] = "1"
+    b = Broadcast(kind="sheets", filters_json=json.dumps(flt), created_by=user.username, scheduled_at=now_utc(),
+                  round_id=rid, text="Tekshirilgan titullar")
+    session.add(b)
+    await session.flush()
+    n = await bsvc.count_recipients(b)
+    if not n:
+        await session.rollback()
+        flash(request, "Yuboriladigan titul yo'q (tekshirilgan titul topilmadi yoki hammasi yuborilgan)", "info")
+        return RedirectResponse("/admin/ranking", 303)
+    audit.log(session, user, "create", "broadcast", b.id, f"Titullar: {n} o'quvchi", ip=client_ip(request))
+    await session.commit()
+    bsvc.wake()
+    flash(request, f"📄 {n} ta o'quvchiga tekshirilgan titul yuborilmoqda. Jarayonni shu sahifada kuzating.")
+    return RedirectResponse("/admin/broadcasts", 303)
+
+
 @router.post("/quick/{kind}")
 async def quick(kind: str, request: Request, user: User = Depends(require_admin),
                 session: AsyncSession = Depends(get_session)):
     """Reyting sahifasidan: natijalar yoki sertifikatlarni hammaga yuborish."""
-    if kind not in ("results", "certificates"):
+    if kind not in ("results", "certificates", "sheets"):
         raise HTTPException(404)
-    if not st.get("results_published") or (kind == "certificates" and not st.get("certificates_enabled")):
-        flash(request, "Avval natijalarni e'lon qiling" + (" va sertifikatlarni yoqing" if kind == "certificates" else ""), "error")
+    form = await request.form()
+    if kind == "sheets":
+        return await _quick_sheets(request, user, session, form)
+    if kind == "certificates" and not (st.get("results_published") and st.get("certificates_enabled")):
+        flash(request, "Avval natijalarni e'lon qiling va sertifikatlarni yoqing", "error")
         return RedirectResponse("/admin/ranking", 303)
-    b = Broadcast(kind=kind, filters_json="{}", created_by=user.username, scheduled_at=now_utc())
+    flt: dict = {}
+    if kind == "results":
+        # Natijalar FAQAT shu tugma bilan e'lon qilinadi (ungacha botda yopiq)
+        if not st.get("results_published"):
+            await st.set_many(session, {"results_published": True})
+            audit.log(session, user, "update", "settings", "results_published", "Natijalar e'lon qilindi",
+                      ip=client_ip(request))
+        if form.get("with_sheets"):
+            flt["with_sheets"] = "1"
+    rid = int_or_none(form.get("round_id"))
+    b = Broadcast(kind=kind, filters_json=json.dumps(flt), created_by=user.username, scheduled_at=now_utc(),
+                  round_id=rid)
     session.add(b)
     await session.flush()
     audit.log(session, user, "create", "broadcast", b.id, KINDS[kind], ip=client_ip(request))

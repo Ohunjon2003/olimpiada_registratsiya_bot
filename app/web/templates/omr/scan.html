@@ -38,7 +38,7 @@
     {% for it in status %}
       {% if it.locked %}<span class="off">🔒 {{ it.subject.name }} — qulflangan (skaner yozmaydi)</span>
       {% elif not it.missing %}<span class="on">✅ {{ it.subject.name }} — skaner ochiq, barcha sinflar kaliti bor</span>
-      {% else %}<span class="on">✅ {{ it.subject.name }} — skaner ochiq · kalit yo'q: <b>{% for g in it.missing %}{{ g.name }}{{ ', ' if not loop.last }}{% endfor %}-sinf</b> (ball keyin hisoblanadi)</span>{% endif %}
+      {% else %}<span class="on">✅ {{ it.subject.name }} — skaner ochiq · kalit yo'q: <b>{% for g in it.missing %}{{ g.name|sinf }}{{ ', ' if not loop.last }}{% endfor %}</b> (ball keyin hisoblanadi)</span>{% endif %}
     {% endfor %}
   </div>
 

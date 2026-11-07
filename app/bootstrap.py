@@ -69,6 +69,13 @@ async def seed() -> None:
             tpl = certs.new_template("pass", "pass_default", "Ruxsatnoma")
             tpl.is_active = True
             s.add(tpl)
+        # 4c) Voucher shabloni
+        has_voucher = (await s.execute(select(func.count()).select_from(CertificateTemplate)
+                                       .where(CertificateTemplate.kind == "voucher"))).scalar_one()
+        if not has_voucher:
+            tpl = certs.new_template("voucher", "voucher_default", "Voucher")
+            tpl.is_active = True
+            s.add(tpl)
         # 5) Eski standart matnlarni (admin o'zgartirmagan bo'lsa) yangi, emojili variantga almashtirish
         for key, olds in st.OLD_DEFAULTS.items():
             row = await s.get(Setting, key)

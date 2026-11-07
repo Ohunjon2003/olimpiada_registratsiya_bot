@@ -147,7 +147,7 @@
     res.className = 'qs-res ' + cls;
     var h = '<div class="qs-big">' + TITLE[d.kind] + '</div>';
     if (d.name) h += '<div class="qs-nm">' + esc(d.name) + '</div><div class="qs-meta">ID <b>' + esc(d.code) + '</b>' +
-      (d.grade ? ' · ' + esc(d.grade) + '-sinf' : '') + (d.school ? ' · ' + esc(d.school) : '') + '</div>';
+      (d.grade ? ' · ' + esc(d.grade) : '') + (d.school ? ' · ' + esc(d.school) : '') + '</div>';
     if (d.seat) h += '<div class="qs-seat">🪑 ' + esc(d.seat) + '</div>';
     if (d.kind !== 'ok' && d.msg) h += '<div class="qs-meta">' + esc(d.msg) + '</div>';
     if (d.kind === 'wrong_place') h += '<div class="acts"><button class="btn sm" type="button" id="btn-force">Baribir «Keldi» belgilash</button></div>';

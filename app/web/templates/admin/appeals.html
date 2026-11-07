@@ -39,7 +39,7 @@
   <div class="appeal-head">
     <div>
       <b>№{{ a.id }}</b> · <a href="/admin/participants/{{ p.id }}">{{ p.last_name }} {{ p.first_name }}</a>
-      <span class="muted">(ID {{ p.code }}, {{ p.school.name }}, {{ p.grade.name }}-sinf)</span>
+      <span class="muted">(ID {{ p.code }}, {{ p.school.name }}, {{ p.grade.name|sinf }})</span>
     </div>
     <span class="badge {{ 'warn' if a.status == 'new' else ('ok' if a.status == 'accepted' else 'err') }}">{{ STATUS[a.status] }}</span>
   </div>

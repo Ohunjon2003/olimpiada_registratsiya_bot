@@ -46,6 +46,11 @@ class ParticipantFilter:
     seated: str = ""          # yes | no — o'rin biriktirilgan / biriktirilmagan
     seat_round: Optional[int] = None
     ids: str = ""             # «1,5,9» — tanlangan o'quvchilar (ommaviy yuborish uchun)
+    voucher_round: Optional[int] = None  # shu turda amaldagi voucheri borlar
+    voucher_unsent: str = ""  # "1" — voucheri hali botga yuborilmaganlar
+    sheet_round: Optional[int] = None    # shu turda tekshirilgan (qabul qilingan) tituli borlar
+    sheet_subject: Optional[int] = None  # … shu fandan
+    sheet_unsent: str = ""    # "1" — tituli hali yuborilmaganlar
 
     @classmethod
     def from_params(cls, params) -> "ParticipantFilter":
@@ -68,6 +73,11 @@ class ParticipantFilter:
             seated=(params.get("seated") or "").strip(),
             seat_round=as_int("seat_round"),
             ids=(params.get("ids") or "").strip(),
+            voucher_round=as_int("voucher_round"),
+            voucher_unsent=(params.get("voucher_unsent") or "").strip(),
+            sheet_round=as_int("sheet_round"),
+            sheet_subject=as_int("sheet_subject"),
+            sheet_unsent=(params.get("sheet_unsent") or "").strip(),
         )
 
     def as_dict(self) -> dict:
@@ -124,6 +134,21 @@ def apply_filter(q, f: ParticipantFilter):
             if f.pass_unsent == "1":
                 sub = sub.where(SeatAssignment.pass_sent_at.is_(None))
             q = q.where(Participant.id.in_(sub))
+    if f.sheet_round:
+        from ..models import SheetScan
+        ss = select(SheetScan.participant_id).where(SheetScan.round_id == f.sheet_round, SheetScan.status == "applied")
+        if f.sheet_subject:
+            ss = ss.where(SheetScan.subject_id == f.sheet_subject)
+        if f.sheet_unsent == "1":
+            ss = ss.where(SheetScan.sent_at.is_(None))
+        q = q.where(Participant.id.in_(ss))
+    if f.voucher_round:
+        from ..models import Voucher
+        vs = select(Voucher.participant_id).where(Voucher.round_id == f.voucher_round, Voucher.cancelled_at.is_(None),
+                                                  Voucher.redeemed_at.is_(None))
+        if f.voucher_unsent == "1":
+            vs = vs.where(Voucher.sent_at.is_(None))
+        q = q.where(Participant.id.in_(vs))
     if f.ids:
         id_list = [int(x) for x in f.ids.split(",") if x.strip().isdigit()][:5000]
         q = q.where(Participant.id.in_(id_list or [-1]))

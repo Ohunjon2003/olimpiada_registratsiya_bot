@@ -18,7 +18,7 @@ from ...services import attendance as att_svc
 from ...services import passqr, ranking, seating
 from ...services import settings as st
 from ...services.participants import ParticipantFilter, apply_filter
-from ...utils import fmt_dt, search_norm
+from ...utils import fmt_dt, grade_label, search_norm
 from ..core import current_user, int_or_none, render, verify_csrf
 
 router = APIRouter(prefix="/attendance", dependencies=[Depends(verify_csrf)])
@@ -174,7 +174,7 @@ async def scan_mark(request: Request, user: User = Depends(attendance_user),
         data = {"kind": kind, "ok": kind in ("ok", "already"), "msg": msg}
         if p is not None:
             data.update({"pid": p.id, "name": p.full_name, "code": p.code or "",
-                         "grade": (p.grade.name if p.grade else ""), "school": (p.school.name if p.school else "")})
+                         "grade": (grade_label(p.grade.name) if p.grade else ""), "school": (p.school.name if p.school else "")})
         data.update(extra)
         return JSONResponse(data)
 

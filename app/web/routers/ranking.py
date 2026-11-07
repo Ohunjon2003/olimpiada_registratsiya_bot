@@ -68,10 +68,30 @@ async def ranking_page(request: Request, user: User = Depends(require_admin),
         for r in rows:
             details[r.participant.id] = json.loads(r.result.details or "{}") if r.result else {}
     qs = urlencode({k: v for k, v in {**params, "target": target, "by_grade": "1" if by_grade else "0"}.items() if v})
+    send = await _send_counts(session, round_) if round_ else {}
     return render(request, "admin/ranking.html", {
         "subjects": subjects, "blocks": blocks, "rounds": rounds, "kind": kind, "obj": obj, "round": round_,
         "by_grade": by_grade, "rows": rows, "params": params, "target": target, "grades": grades,
-        "schools": schools, "details": details, "missing": missing, "qs": qs})
+        "schools": schools, "details": details, "missing": missing, "qs": qs, "send": send})
+
+
+async def _send_counts(session: AsyncSession, round_: Round) -> dict:
+    """«Natijalarni yetkazish» uchun: nechta o'quvchiga natija va titul boradi."""
+    from ...models import Participant, Result, SheetScan
+    with_result = (await session.execute(select(func.count(func.distinct(Result.participant_id)))
+                                         .join(Participant, Participant.id == Result.participant_id)
+                                         .where(Result.round_id == round_.id, Participant.status == "active",
+                                                Participant.bot_blocked == False))).scalar_one()  # noqa: E712
+    base = (select(func.count(func.distinct(SheetScan.participant_id)))
+            .join(Participant, Participant.id == SheetScan.participant_id)
+            .where(SheetScan.round_id == round_.id, SheetScan.status == "applied", Participant.status == "active",
+                   Participant.bot_blocked == False))  # noqa: E712
+    sheets = (await session.execute(base)).scalar_one()
+    unsent = (await session.execute(base.where(SheetScan.sent_at.is_(None)))).scalar_one()
+    subjects = (await session.execute(select(Subject).join(SheetScan, SheetScan.subject_id == Subject.id)
+                                      .where(SheetScan.round_id == round_.id, SheetScan.status == "applied")
+                                      .distinct().order_by(Subject.name))).scalars().all()
+    return {"results": with_result, "sheets": sheets, "sheets_unsent": unsent, "sheet_subjects": subjects}
 
 
 @router.get("/export")

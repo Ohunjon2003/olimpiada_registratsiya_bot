@@ -26,7 +26,7 @@
          placeholder="🔎 Familiya, ism, ID yoki telefon — yozishni boshlang...">
   <div class="chips att-grades">
     <label class="chip-radio"><input type="radio" name="grade_id" value="" {% if not params.get('grade_id') %}checked{% endif %}><span>Barcha sinflar</span></label>
-    {% for g in grades %}<label class="chip-radio"><input type="radio" name="grade_id" value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}checked{% endif %}><span>{{ g.name }}-sinf</span></label>{% endfor %}
+    {% for g in grades %}<label class="chip-radio"><input type="radio" name="grade_id" value="{{ g.id }}" {% if params.get('grade_id') == g.id|string %}checked{% endif %}><span>{{ g.name|sinf }}</span></label>{% endfor %}
   </div>
   <div class="filters">
     {{ select('school_id', schools, params.get('school_id', ''), empty='Barcha maktablar', label='Maktab') }}

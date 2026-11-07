@@ -24,7 +24,7 @@ from ...services import export
 from ...services import attendance as att_svc
 from ...services.participants import (ParticipantFilter, apply_filter,
                                       build_search_text, resolve_att_round)
-from ...utils import clean_name, normalize_phone
+from ...utils import clean_name, grade_label, normalize_phone
 from ..core import (Page, client_ip, flash, int_or_none, render,
                     require_admin, verify_csrf)
 
@@ -76,7 +76,7 @@ async def suggest(request: Request, user: User = Depends(require_admin),
     rows.sort(key=rank)
     out = [{"id": p.id, "code": p.code, "name": p.full_name,
             "info": " · ".join(x for x in ((p.school.name if p.school else ""),
-                                           (f"{p.grade.name}-sinf" if p.grade else ""),
+                                           (grade_label(p.grade.name) if p.grade else ""),
                                            ("chetlatilgan" if p.status != "active" else "")) if x),
             "url": f"/admin/participants/{p.id}"} for p in rows[:8]]
     return JSONResponse(out)
@@ -125,6 +125,13 @@ async def export_xlsx(request: Request, user: User = Depends(require_admin),
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
+async def _voucher(session, p):
+    """O'quvchining eng so'nggi voucheri (sahifada ko'rsatish uchun)."""
+    from ...models import Voucher
+    return (await session.execute(select(Voucher).where(Voucher.participant_id == p.id)
+                                  .order_by(Voucher.id.desc()))).scalars().first()
+
+
 @router.get("/{pid}")
 async def detail(pid: int, request: Request, user: User = Depends(require_admin),
                  session: AsyncSession = Depends(get_session)):
@@ -145,7 +152,8 @@ async def detail(pid: int, request: Request, user: User = Depends(require_admin)
     return render(request, "admin/participant.html", {
         "p": p, "results": results, "schools": schools, "grades": grades, "subjects": subjects,
         "cert_items": cert_items, "errors": [], "seat": seat, "scans": scans,
-        "seat_text": seating.seat_text(seat.room, seat) if seat else ""})
+        "seat_text": seating.seat_text(seat.room, seat) if seat else "",
+        "voucher": await _voucher(session, p)})
 
 
 @router.post("/{pid}/save")

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Voucher tekshiruvi{% endblock %}
+{% block head %}<style>
+  .vc-wrap { max-width: 520px; margin: 0 auto; padding: 18px 16px 40px; }
+  .vc-card { background: #fff; border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--line); }
+  .vc-top { padding: 22px 20px; text-align: center; color: #fff; }
+  .vc-top .ico { font-size: 44px; line-height: 1; }
+  .vc-top h1 { color: #fff; margin: 8px 0 2px; font-size: 24px; }
+  .vc-top.active { background: linear-gradient(135deg, #15803d, #16a34a); }
+  .vc-top.redeemed { background: linear-gradient(135deg, #475569, #64748b); }
+  .vc-top.cancelled, .vc-top.none, .vc-top.expired { background: linear-gradient(135deg, #b91c1c, #dc2626); }
+  .vc-body { padding: 18px 20px; }
+  .vc-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .vc-row span { color: var(--muted); } .vc-row b { text-align: right; }
+  .vc-amount { text-align: center; padding: 14px; margin: 4px 0 10px; border-radius: 12px; background: #fdf6e3; border: 1px solid #ecd9a0; }
+  .vc-amount .n { font-size: 30px; font-weight: 800; color: #7c2d12; }
+  .vc-amount .w { color: #92400e; font-size: 13px; }
+  .vc-admin { margin-top: 16px; padding: 14px; border-radius: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; }
+  .vc-foot { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 14px; }
+  .vc-search { display: flex; gap: 8px; margin-top: 14px; } .vc-search input { flex: 1; text-transform: uppercase; }
+</style>{% endblock %}
+
+{% macro body() %}
+<div class="vc-wrap">
+  {% if v %}
+    {% set state = 'expired' if (v.status == 'active' and expired) else v.status %}
+    <div class="vc-card">
+      <div class="vc-top {{ state }}">
+        <div class="ico">{{ {'active': '✅', 'redeemed': '☑️', 'cancelled': '⛔', 'expired': '⏳'}[state] }}</div>
+        <h1>{{ {'active': 'Haqiqiy voucher', 'redeemed': 'Voucher ishlatilgan', 'cancelled': 'Voucher bekor qilingan', 'expired': 'Muddati o\'tgan'}[state] }}</h1>
+        <div>{{ olympiad }}</div>
+      </div>
+      <div class="vc-body">
+        <div class="vc-amount"><div class="n">{{ fmt(v.amount) }} so'm</div><div class="w">({{ words(v.amount) }} so'm)</div></div>
+        <div class="vc-row"><span>Egasi</span><b>{{ v.participant.full_name }}</b></div>
+        <div class="vc-row"><span>Maktab, sinf</span><b>{{ v.participant.school.name if v.participant.school else '' }}{% if v.participant.grade %}, {{ v.participant.grade.name|sinf }}{% endif %}</b></div>
+        <div class="vc-row"><span>Voucher raqami</span><b>{{ v.serial }}</b></div>
+        <div class="vc-row"><span>ID</span><b>{{ v.participant.code }}</b></div>
+        <div class="vc-row"><span>Berilgan</span><b>{{ fmt_dt(v.issued_at, '%d.%m.%Y') }}</b></div>
+        <div class="vc-row"><span>Amal qilish muddati</span><b>{{ valid_until.strftime('%d.%m.%Y') if valid_until else 'muddatsiz' }}</b></div>
+        {% if v.redeemed_at %}
+        <div class="vc-row"><span>Ishlatilgan</span><b>{{ fmt_dt(v.redeemed_at) }}</b></div>
+        {% if admin %}<div class="vc-row"><span>Kim belgiladi</span><b>{{ v.redeemed_by }}{% if v.redeem_note %} · {{ v.redeem_note }}{% endif %}</b></div>{% endif %}
+        {% endif %}
+        {% if v.cancelled_at %}<div class="vc-row"><span>Bekor qilingan</span><b>{{ fmt_dt(v.cancelled_at) }}{% if v.cancel_reason %} · {{ v.cancel_reason }}{% endif %}</b></div>{% endif %}
+
+        {% if admin %}
+        <div class="vc-admin">
+          {% if state == 'active' %}
+          <form method="post" action="/v/{{ v.serial }}/redeem" data-confirm="{{ v.participant.full_name }} — {{ fmt(v.amount) }} so'm voucher ISHLATILDI deb belgilansinmi? Buni qaytarib bo'lmaydi (faqat admin panelida).">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <div class="field"><label>Izoh (ixtiyoriy): nima uchun ishlatildi</label><input type="text" name="note" maxlength="255" placeholder="Masalan: kurs to'lovi, shartnoma №…"></div>
+            <button class="btn primary" style="width:100%;justify-content:center;min-height:48px">✅ Ishlatildi deb belgilash</button>
+          </form>
+          <div class="help mt-s">O'quvchining shaxsini (metrika/ID karta) voucherdagi ism bilan solishtiring.</div>
+          {% elif state == 'redeemed' %}
+          <div class="muted small">Bu voucher ishlatilgan — qayta ishlatib bo'lmaydi. Xato belgilangan bo'lsa: <a href="/admin/vouchers?q={{ v.serial }}">«🎟 Voucherlar»</a> → «Belgini olib tashlash».</div>
+          {% else %}
+          <div class="muted small">Bu voucher bilan xizmat ko'rsatilmaydi.</div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="vc-card">
+      <div class="vc-top none"><div class="ico">⛔</div><h1>Voucher topilmadi</h1><div>{{ olympiad }}</div></div>
+      <div class="vc-body">
+        {% if searched %}<p><b>{{ searched }}</b> raqamli voucher yo'q. Raqamni tekshiring — bu soxta bo'lishi mumkin.</p>{% else %}<p>Voucher raqamini kiriting (masalan, V-0127-K3F9QZ).</p>{% endif %}
+        <form method="get" action="/v" class="vc-search">
+          <input type="text" name="serial" value="{{ searched }}" placeholder="V-0127-…" autocomplete="off" required>
+          <button class="btn primary">Tekshirish</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+  <div class="vc-foot">🔒 Voucher haqiqiyligi olimpiada tizimi bazasidan tekshirildi · {{ request.url.hostname }}</div>
+</div>
+{% endmacro %}
+
+{% block content %}{{ body() }}{% endblock %}
+{% block bare %}{{ body() }}{% endblock %}

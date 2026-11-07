@@ -526,3 +526,12 @@ form.filters.loading input[type=search] { background-image: linear-gradient(90de
 .grade-box[open] > summary::before { transform: rotate(90deg); }
 .grade-box h2.inline { display: inline; margin: 0; }
 .card.soft { background: #f8fafc; box-shadow: none; }
+
+/* Qator menyusi (⋯) — voucherlar jadvali */
+.row-menu { position: relative; display: inline-block; }
+.row-menu > summary { list-style: none; cursor: pointer; }
+.row-menu > summary::-webkit-details-marker { display: none; }
+.row-menu-body { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; background: #fff; border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 220px; box-shadow: var(--shadow); }
+.row-menu-body form { display: flex; gap: 6px; }
+.center-btns { justify-content: center; }

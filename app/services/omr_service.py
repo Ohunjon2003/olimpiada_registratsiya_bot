@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import config
 from ..models import (AnswerKey, Participant, Result, Round, SeatAssignment,
                       SheetScan, Subject, User)
-from ..utils import now_utc
+from ..utils import grade_label, now_utc
 from . import audit, omr, ranking
 from . import settings as st
 from .scoring import ScoreError, compute
@@ -192,7 +192,7 @@ async def process(session: AsyncSession, user: User, data: bytes, force: bool = 
     p = await session.get(Participant, tok.pid)
     if subject is None or round_ is None or p is None:
         return ScanReply("error", "Titul egasi, fani yoki turi bazada topilmadi", tok.raw)
-    head = f"ID {p.code} · {p.grade.name + '-sinf · ' if p.grade else ''}{subject.name}"
+    head = f"ID {p.code} · {grade_label(p.grade.name) + ' · ' if p.grade else ''}{subject.name}"
     if not user.is_admin and subject.id not in {s.id for s in user.subjects}:
         return ScanReply("error", f"{head}: bu fan sizga biriktirilmagan", tok.raw)
     if not subject.omr_enabled:
@@ -406,7 +406,7 @@ async def cards(session: AsyncSession, subject: Subject, round_: Round, exam_ses
                             variant=f"{omr.variant_letter(var)} variant" if subject.variants > 1 else "",
                             name=p.full_name if show_name else "",
                             session=f"{a.session.name}" if a else "",
-                            grade=f"{p.grade.name}-sinf" if p.grade else "")
+                            grade=grade_label(p.grade.name) if p.grade else "")
         out.append((info, omr.layout(n, d)))
     return out
 

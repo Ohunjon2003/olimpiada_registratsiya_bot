@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Voucherlar{% endblock %}
+{% block crumbs %}Voucherlar · {{ round.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>🎟 Voucherlar</h1>
+    <div class="muted">Olimpiadada qatnashganlarga pul qiymatli voucher: ism-familiya, qiymat, noyob raqam va tekshirish QR kodi bilan.</div></div>
+  {% if rounds|length > 1 %}
+  <form method="get" class="inline"><select name="round_id" onchange="this.form.submit()">
+    {% for r in rounds %}<option value="{{ r.id }}" {% if r.id == round.id %}selected{% endif %}>{{ r.name }}{% if r.is_current %} (joriy){% endif %}</option>{% endfor %}
+  </select></form>
+  {% endif %}
+</div>
+
+<div class="grid g4 mb">
+  <div class="card stat"><div class="v">{{ stats.issued - stats.cancelled }}</div><div class="l">Berilgan voucher · jami <b>{{ fmt(stats.sum_issued) }}</b> so'm</div></div>
+  <div class="card stat"><div class="v">{{ stats.pending }}</div><div class="l">Hali berilmagan (shartga mos: {{ stats.eligible }})</div></div>
+  <div class="card stat"><div class="v">{{ stats.sent }}</div><div class="l">Botga yuborilgan · qolgan <b>{{ stats.unsent }}</b></div></div>
+  <div class="card stat"><div class="v">{{ stats.redeemed }}</div><div class="l">Ishlatilgan · <b>{{ fmt(stats.sum_redeemed) }}</b> so'm</div></div>
+</div>
+
+<div class="card mb">
+  <h2>Qanday ishlaydi</h2>
+  <div class="flow-step mb-s"><span class="dot">1</span><div><b>Sozlang:</b> qiymat, matn, kimga berilishi (odatda — davomatda «Keldi» bo'lganlar).</div></div>
+  <div class="flow-step mb-s"><span class="dot">2</span><div><b>«🎟 Voucher berish»</b> — har o'quvchiga noyob raqam (masalan <code>V-0127-K3F9QZ</code>). Keyin qo'shilganlar uchun qayta bosing — eskilari o'zgarmaydi.</div></div>
+  <div class="flow-step mb-s"><span class="dot">3</span><div><b>Botga yuboring</b> (rasm + PDF) va/yoki <b>chop eting</b> (A4 varaqqa 2 tadan, maktablar bo'yicha).</div></div>
+  <div class="flow-step"><span class="dot">4</span><div><b>Ishlatishda:</b> voucherdagi QR kodni istalgan telefon kamerasi bilan skaner qiling → tekshirish sahifasi ochiladi (✅ haqiqiy / ☑️ ishlatilgan / ⛔ bekor). Admin tizimga kirgan bo'lsa, o'sha sahifada <b>«✅ Ishlatildi»</b> tugmasi chiqadi — voucher ikkinchi marta ishlatilmaydi.</div></div>
+</div>
+
+<div class="grid g2 mb">
+  <form method="post" action="/admin/vouchers/settings" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+    <h2>⚙️ Sozlamalar</h2>
+    <div class="grid g2">
+      <div class="field"><label>Qiymati (so'm)</label><input type="text" name="amount" inputmode="numeric" value="{{ fmt(setting('voucher_amount') or 0) }}" required>
+        <div class="help">So'z bilan avtomatik yoziladi</div></div>
+      <div class="field"><label>Amal qilish muddati</label><input type="date" name="valid_until" value="{{ setting('voucher_valid_until') }}"><div class="help">Bo'sh — muddatsiz</div></div>
+    </div>
+    <div class="field"><label>Matn (nima uchun)</label><input type="text" name="reason" maxlength="200" value="{{ setting('voucher_reason') }}"></div>
+    <div class="field"><label>Shartlar (kichik yozuv)</label><textarea name="terms" rows="2" maxlength="600">{{ setting('voucher_terms') }}</textarea></div>
+    <div class="field"><label>Kimga beriladi</label><select name="who">
+      {% for k, v in who.items() %}<option value="{{ k }}" {% if setting('voucher_who') == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="grid g2">
+      <div class="field"><label>Raqam boshidagi harf</label><input type="text" name="prefix" maxlength="6" value="{{ setting('voucher_prefix') or 'V' }}"></div>
+      <div class="field"><label>Sayt manzili (QR uchun)</label><input type="text" name="site_url" value="{{ site or site_guess }}" placeholder="https://olimpiada.com.uz">
+        <div class="help">QR shu manzilga olib boradi</div></div>
+    </div>
+    <div class="btns"><button class="btn primary">Saqlash</button></div>
+  </form>
+
+  <div class="card">
+    <h2>🎨 Ko'rinishi</h2>
+    {% if tpl %}
+      <a href="/admin/certificates/{{ tpl.id }}"><img src="/admin/certificates/{{ tpl.id }}/preview.png?w=600&v={{ tpl.design_json|length }}{{ setting('voucher_amount') }}" alt="" style="max-width:100%;border:1px solid var(--line);border-radius:8px"></a>
+      <div class="btns mt-s"><a class="btn" href="/admin/certificates/{{ tpl.id }}">✏️ Dizaynni o'zgartirish</a></div>
+    {% else %}<div class="alert warn">Faol voucher shabloni yo'q. <a href="/admin/certificates/new?kind=voucher">Yarating</a> va faol qiling.</div>{% endif %}
+    {% if expired %}<div class="alert warn mt-s">⏳ Amal qilish muddati o'tgan ({{ valid_until.strftime('%d.%m.%Y') }}) — «Ishlatildi» belgilab bo'lmaydi.</div>{% endif %}
+  </div>
+</div>
+
+<div class="card mb">
+  <h2>▶️ Amallar</h2>
+  <div class="btns">
+    <form method="post" action="/admin/vouchers/issue" class="inline" data-confirm="{{ stats.pending }} ta o'quvchiga {{ fmt(setting('voucher_amount') or 0) }} so'mlik voucher beriladi. Davom etaymi?">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <button class="btn primary" {% if not tpl %}disabled{% endif %}>🎟 Voucher berish ({{ stats.pending }} ta)</button>
+    </form>
+    <form method="post" action="/admin/vouchers/send" class="inline" data-confirm="Voucherlar botga yuboriladi. Davom etaymi?">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id }}">
+      <button class="btn" name="mode" value="unsent" {% if not stats.unsent %}disabled{% endif %}>📨 Botga yuborish — olmaganlarga ({{ stats.unsent }})</button>
+      <button class="btn" name="mode" value="all" {% if not stats.active %}disabled{% endif %}>🔁 Hammaga qayta</button>
+    </form>
+    <a class="btn" href="/admin/vouchers-export.xlsx?round_id={{ round.id }}">📊 Excel</a>
+    <a class="btn" href="/v">🔎 Raqam bo'yicha tekshirish</a>
+  </div>
+  <form method="get" action="/admin/vouchers-print.pdf" class="filters mt">
+    <input type="hidden" name="round_id" value="{{ round.id }}">
+    <div><label class="small">🖨 Chop etish (A4 da 2 tadan, faqat amaldagilar)</label>
+      <select name="school_id"><option value="">Barcha maktablar</option>
+        {% for s in schools %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div><label class="small">Qism ({{ print_part }} tadan)</label><select name="part">
+      {% for n in range(1, ((stats.active + print_part - 1) // print_part) + 1 if stats.active else 2) %}
+      <option value="{{ n }}">{{ (n - 1) * print_part + 1 }}–{{ n * print_part }}</option>{% endfor %}</select></div>
+    <div class="btns"><button class="btn">⬇️ PDF</button></div>
+  </form>
+</div>
+
+<form method="get" class="card mb filters" id="vf">
+  <input type="hidden" name="round_id" value="{{ round.id }}">
+  <div style="flex:2"><label class="small">Qidiruv</label><input type="search" name="q" value="{{ params.get('q', '') }}" placeholder="Ism, ID yoki voucher raqami"></div>
+  <div><label class="small">Holat</label><select name="status" onchange="this.form.submit()">
+    <option value="">Hammasi</option>
+    {% for k, l in [('active', '✅ Amalda'), ('unsent', '📭 Botga yuborilmagan'), ('redeemed', '☑️ Ishlatilgan'), ('cancelled', '⛔ Bekor qilingan')] %}
+    <option value="{{ k }}" {% if params.get('status') == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label class="small">Maktab</label><select name="school_id" onchange="this.form.submit()"><option value="">Barchasi</option>
+    {% for s in schools %}<option value="{{ s.id }}" {% if params.get('school_id') == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="btns"><button class="btn">🔎</button></div>
+</form>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Voucher</th><th>O'quvchi</th><th>Maktab</th><th>Qiymat</th><th>Holat</th><th>Bot</th><th></th></tr></thead>
+  <tbody>
+  {% for v in items %}
+    <tr>
+      <td><a href="/v/{{ v.serial }}" target="_blank"><code>{{ v.serial }}</code></a></td>
+      <td><a href="/admin/participants/{{ v.participant_id }}">{{ v.participant.full_name }}</a> <span class="muted small">· {{ v.participant.code }}</span></td>
+      <td class="small">{{ v.participant.school.name if v.participant.school else '' }}{% if v.participant.grade %}, {{ v.participant.grade.name|sinf }}{% endif %}</td>
+      <td>{{ fmt(v.amount) }}</td>
+      <td>{{ status_labels[v.status] }}{% if v.redeemed_at %}<div class="muted small">{{ fmt_dt(v.redeemed_at) }} · {{ v.redeemed_by }}{% if v.redeem_note %} · {{ v.redeem_note }}{% endif %}</div>{% endif %}
+        {% if v.cancel_reason %}<div class="muted small">{{ v.cancel_reason }}</div>{% endif %}</td>
+      <td class="small">{{ '✓ ' ~ fmt_dt(v.sent_at, '%d.%m %H:%M') if v.sent_at else '—' }}</td>
+      <td class="right">
+        <details class="row-menu"><summary class="btn sm">⋯</summary>
+          <div class="row-menu-body">
+            <a class="btn sm" href="/admin/vouchers/{{ v.id }}.png" target="_blank">🖼 Ko'rish</a>
+            <a class="btn sm" href="/admin/vouchers/{{ v.id }}.pdf">⬇️ PDF</a>
+            {% if v.status == 'active' %}
+            <form method="post" action="/admin/vouchers/{{ v.id }}/send" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">📨 Botga</button></form>
+            <form method="post" action="/admin/vouchers/{{ v.id }}/cancel" class="inline" data-confirm="Voucher {{ v.serial }} bekor qilinsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="reason" placeholder="Sabab" style="width:120px"><button class="btn sm danger">⛔ Bekor</button></form>
+            {% elif v.status == 'cancelled' %}
+            <form method="post" action="/admin/vouchers/{{ v.id }}/restore" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">↩ Tiklash</button></form>
+            {% elif v.status == 'redeemed' %}
+            <form method="post" action="/admin/vouchers/{{ v.id }}/unredeem" class="inline" data-confirm="«Ishlatildi» belgisi olib tashlansinmi? (Faqat xato belgilangan bo'lsa)"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">↩ Belgini olib tashlash</button></form>
+            {% endif %}
+          </div>
+        </details>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="7" class="empty">{{ "Voucher berilmagan — «🎟 Voucher berish» tugmasini bosing." if not stats.issued else "Topilmadi" }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if pages > 1 %}
+<div class="btns mt center-btns">
+  {% for n in range(1, pages + 1) %}<a class="btn sm {{ 'primary' if n == page else '' }}" href="?round_id={{ round.id }}&q={{ params.get('q', '')|urlencode }}&status={{ params.get('status', '') }}&school_id={{ params.get('school_id', '') }}&page={{ n }}">{{ n }}</a>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

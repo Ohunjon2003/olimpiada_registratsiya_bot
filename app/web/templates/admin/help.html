@@ -23,11 +23,12 @@
     {{ st(6, "Ruxsatnomalar", "Dizaynni tekshiring va olimpiadadan bir kun oldingi soatga rejalashtiring. O'quvchi botdan ham oladi.", [("/admin/seating?tab=plan","🎫 Ruxsatnoma")]) }}
     {{ st(7, "Titullar (ixtiyoriy)", "Avtomatik tekshiruv uchun: fanda yoqing → chop eting → o'quvchilarga qo'llanmani ko'rsating.", [("/admin/omr","📝 Titul va skaner"),("/admin/omr?tab=print","🖨 Chop etish"),("/qollanma","🎓 O'quvchi qo'llanmasi")]) }}
     <h3>Olimpiada kuni</h3>
-    {{ st(8, "Davomat", "Kirishda «Keldi» belgilang. Xona/smena bo'yicha filtrlang.", [("/attendance","🙋 Davomat")]) }}
+    {{ st(8, "Davomat", "Kirishda ruxsatnomadagi QR ni telefon bilan skaner qiling — «Keldi» o'zi belgilanadi. Yoki ro'yxatdan ism/ID bilan.", [("/attendance/scan","📷 QR davomat"),("/attendance","🙋 Davomat")]) }}
     {{ st(9, "Tekshirish", "Titullar: hakamlar telefonda skaner qiladi. Qo'lda: «Ball kiritish». Boshqa kompyuter/telefondan bir vaqtda ishlash mumkin.", [("/scan","📷 Skaner"),("/judge/enter","✍️ Ball kiritish"),("/admin/omr?tab=review","🔎 Tekshirish kerak")]) }}
     <h3>Natijalar</h3>
     {{ st(10, "Reyting va qulflash", "Barcha ballar kiritilgach fanni yoki turni 🔒 qulflang — hakamlar tasodifan o'zgartirmasin. Kerak bo'lsa 🔓 ochiladi.", [("/admin","📊 Bosh sahifa"),("/admin/ranking","🏅 Reyting")]) }}
     {{ st(11, "Natijalar va sertifikatlar", "Natijalarni e'lon qiling, o'rinlarni tekshiring, sertifikatlarni botga yuboring.", [("/admin/awards","🏅 O'rinlar"),("/admin/certificates","🎓 Sertifikatlar"),("/admin/broadcasts","📣 Xabar yuborish")]) }}
+    {{ st("11b", "Voucherlar", "Qatnashganlarga pul qiymatli voucher: qiymat va matnni sozlang → «Voucher berish» → botga yuboring yoki chop eting. Ishlatishda voucherdagi QR ni telefon bilan skaner qiling — admin sahifada «✅ Ishlatildi» bosadi.", [("/admin/vouchers","🎟 Voucherlar")]) }}
     {{ st(12, "Arxiv", "Hammasini Excel'ga saqlang, keyin yangi olimpiada uchun tozalang.", [("/admin/archive","🗄 Arxiv va tozalash")]) }}
   </div>
 </div>

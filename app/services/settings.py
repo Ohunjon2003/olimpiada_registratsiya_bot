@@ -29,6 +29,16 @@ DEFAULTS: dict[str, tuple[str, Any, str]] = {
     "results_published": ("bool", False, "Natijalar e'lon qilingan (bot orqali ko'rinadi)"),
     "ranking_by_grade": ("bool", True, "O'quvchilarga o'rin sinf kesimida beriladi"),
     "certificates_enabled": ("bool", False, "Sertifikat/diplomlar yoqilgan"),
+    # Voucherlar (qatnashgani uchun pul qiymatli)
+    "voucher_amount": ("int", 2000000, "Voucher qiymati (so'm)"),
+    "voucher_reason": ("str", "Hokim olimpiadasida qatnashgani uchun", "Voucher matni (nima uchun berilgan)"),
+    "voucher_terms": ("text", "Voucher faqat egasi tomonidan bir marta ishlatiladi. "
+                              "Haqiqiyligini QR kod orqali tekshiring.", "Voucher shartlari"),
+    "voucher_valid_until": ("str", "", "Voucher amal qilish muddati (YYYY-MM-DD, bo'sh — muddatsiz)"),
+    "voucher_who": ("str", "attended", "Kimga: attended (kelganlar) | results (natijasi borlar) | all (hammaga)"),
+    "voucher_prefix": ("str", "V", "Voucher raqami boshidagi harf(lar)"),
+    "vouchers_published": ("bool", False, "Voucherlar yuborilgan (botda «🎟 Voucher» tugmasi)"),
+    "site_url": ("str", "", "Sayt manzili (QR havolalari uchun), masalan https://olimpiada.com.uz"),
     # Salomlashish va tabrik matnlari «Bot matnlari» sahifasida tahrirlanadi
     "welcome_text": ("text", "👋 Assalomu alaykum!\n\n🏆 {olympiad} ga ro'yxatdan o'tish botiga "
                              "xush kelibsiz!\n\n📝 Ro'yxatdan o'tish 2–3 daqiqa vaqt oladi. Boshladik! 🚀",
@@ -111,6 +121,14 @@ TEXT_PAGE_KEYS = ("welcome_text", "welcome_text_cyr", "congrats_text", "congrats
                   "appeals_enabled", "appeals_until", "seating_one_per_desk", "seating_group_by",
                   "pass_notice", "passes_published", "pass_send_time", "omr_id_required", "omr_show_name",
                   "registration_mode")
+
+
+# «⚙️ Umumiy sozlamalar» formasidagi kalitlar — FAQAT shular saqlanadi.
+# (Avval formada yo'q kalitlar ham qayta yozilib, voucher qiymati, sayt manzili kabi sozlamalar
+#  «Saqlash» bosilganda o'chib ketardi.)
+GENERAL_FORM_KEYS = ("olympiad_name", "registration_start", "registration_end", "max_subjects",
+                     "allow_profile_edit", "instagram_username_required", "judges_see_names", "judges_attendance",
+                     "ranking_by_grade", "results_published", "certificates_enabled", "backup_interval_hours")
 
 
 def raw(key: str) -> str:

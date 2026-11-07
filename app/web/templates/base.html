@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/static/icons/favicon-32.png">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <title>{% block title %}{{ setting('olympiad_name') }}{% endblock %} — boshqaruv</title>
-  <link rel="stylesheet" href="/static/app.css?v=14">
+  <link rel="stylesheet" href="/static/app.css?v=15">
   <script src="/static/vendor/htmx.min.js"></script>
   {% block head %}{% endblock %}
 </head>
@@ -42,6 +42,7 @@
         {{ nav('/admin/omr', '📝', 'Titul va skaner') }}
         {{ nav('/scan', '📷', 'Skaner') }}
         {{ nav('/admin/certificates', '🎓', 'Sertifikatlar') }}
+        {{ nav('/admin/vouchers', '🎟', 'Voucherlar') }}
         {{ nav('/admin/awards', '🏅', "O'rinlar va mukofotlar") }}
         {{ nav('/admin/appeals', '⚖️', "E'tirozlar") }}
         <div class="nav-title">Sozlash</div>

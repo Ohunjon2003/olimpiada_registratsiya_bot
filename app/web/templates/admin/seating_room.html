@@ -33,7 +33,7 @@
             {% for s in range(1, room.seats_per_desk + 1) %}{% set key = r ~ '-' ~ d ~ '-' ~ s %}{% set a = placed.get((r, d, s)) %}
             {% if a %}{% set p = a.participant %}
             <button type="button" class="seat taken {{ 'bad' if (r, d, s) in bad else '' }}" data-seat="{{ key }}" data-aid="{{ a.id }}"
-                    style="background: {{ colors.get(p.school_id, '#eee') }}" title="{{ p.full_name }} — {{ p.school.name }}, {{ p.grade.name }}-sinf">
+                    style="background: {{ colors.get(p.school_id, '#eee') }}" title="{{ p.full_name }} — {{ p.school.name }}, {{ p.grade.name|sinf }}">
               <span class="no">{{ seat_number(room, (r, d, s)) }}</span><span class="code">{{ p.code }}</span>
               <span class="nm">{{ p.last_name }}</span><span class="nm2">{{ p.first_name }}</span>
               {% if a.pass_sent_at %}<span class="sent" title="Ruxsatnoma yuborilgan">🎫</span>{% endif %}

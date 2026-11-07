@@ -22,7 +22,7 @@ from ...services import audit, jobs, omr, omr_service as osvc, ranking
 from ...services import broadcast as bsvc
 from ...services import settings as st
 from ...services.pdfwriter import JpegPdfWriter
-from ...utils import now_utc, search_norm
+from ...utils import grade_label, now_utc, search_norm
 from ..core import (Page, client_ip, current_user, flash, int_or_none, render,
                     require_admin, verify_csrf)
 
@@ -231,7 +231,7 @@ async def key_page(sid: int, request: Request, user: User = Depends(require_admi
         SheetScan.subject_id == sid, SheetScan.round_id == round_.id, SheetScan.grade_id == grade.id,
         SheetScan.status == "applied"))).scalar_one()
     # Boshqa sinf kalitidan nusxa olish uchun (savollar bir xil bo'lsa)
-    copy_from = {f"{g.name}-sinf": [all_keys[(g.id, v)].answers if (g.id, v) in all_keys else "" for v in range(subject.variants)]
+    copy_from = {grade_label(g.name): [all_keys[(g.id, v)].answers if (g.id, v) in all_keys else "" for v in range(subject.variants)]
                  for g in grades if g.id != grade.id and any((g.id, v) in all_keys for v in range(subject.variants))}
     done = {g.id: all((g.id, v) in all_keys for v in range(subject.variants)) for g in grades}
     return render(request, "omr/key.html", {"subject": subject, "round": round_, "keys": keys, "grades": grades,
@@ -272,13 +272,13 @@ async def save_key(sid: int, request: Request, user: User = Depends(require_admi
         if row.answers != key:
             changed.append(omr.variant_letter(v))
             audit.log(session, user, "update", "answer_key", f"{sid}/{round_.id}/{grade.id}/{v}",
-                      f"{subject.name}, {grade.name}-sinf: {omr.variant_letter(v)} variant kaliti",
+                      f"{subject.name}, {grade_label(grade.name)}: {omr.variant_letter(v)} variant kaliti",
                       old=row.answers or None, new=key, ip=client_ip(request))
         row.answers, row.updated_by = key, user.username
     await session.flush()
     done, skipped = await osvc.regrade(session, subject, round_.id, user)
     await session.commit()
-    msg = (f"{subject.name}, {grade.name}-sinf: kalit saqlandi"
+    msg = (f"{subject.name}, {grade_label(grade.name)}: kalit saqlandi"
            + (f" ({', '.join(changed)})" if changed else " (o'zgarish yo'q)"))
     if done:
         msg += f". {done} ta ish qayta hisoblandi"
@@ -460,6 +460,12 @@ async def send_sheets(request: Request, user: User = Depends(require_admin),
     """Tekshirilgan titullarni o'quvchilarga botda yuborish (tanlanganlar yoki filtrdagilarning hammasi)."""
     form = await request.form()
     round_ = await _round(session, int_or_none(form.get("round_id")))
+    if not st.get("results_published"):
+        # Titulda ball ko'rinadi — natijalar e'lon qilinmaguncha o'quvchiga HECH NARSA bormasin
+        flash(request, "Natijalar hali e'lon qilinmagan — titullar ham yuborilmaydi. «🏅 Reyting» → "
+                       "«📨 Natijalarni e'lon qilish va yuborish», keyin titullarni yuboring.", "error")
+        back = str(form.get("back") or "/admin/omr?tab=scans")
+        return RedirectResponse(back if back.startswith("/admin/") else "/admin/omr?tab=scans", 303)
     ids = form.getlist("pid") or [x for x in str(form.get("all_pids") or "").split(",") if x]
     ids = sorted({int(x) for x in ids if str(x).isdigit()})
     if not ids:

@@ -6,8 +6,10 @@
     <div class="muted">{% if round %}{{ round.name }}{% endif %} · {{ 'Sinflar kesimida' if by_grade else 'Umumiy' }} · Reytingda: <b>{{ rows|length }}</b>
       {% if missing %} · <span class="badge warn">{{ missing }} ta natija kiritilmagan</span>{% endif %}</div></div>
   <div class="btns no-print">
-    <form method="post" action="/admin/toggle/results_published" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}">
-      {% if setting('results_published') %}<button class="btn ok" title="Bosib yashirish mumkin">✅ Natijalar e'lon qilingan</button>{% else %}<button class="btn">📢 Natijalarni e'lon qilish</button>{% endif %}</form>
+    {% if setting('results_published') %}
+    <form method="post" action="/admin/toggle/results_published" class="inline" data-confirm="Natijalar botda yashirilsinmi? O'quvchilar «Natijalarim»ni bosganda «hali e'lon qilinmagan» chiqadi.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ok" title="Bosib yashirish mumkin">✅ E'lon qilingan · 🙈 Yashirish</button></form>
+    {% else %}<span class="badge warn" title="O'quvchilar botda natijani ko'rmaydi">🔒 Natijalar yopiq — botga hech narsa bormaydi</span>{% endif %}
     <a class="btn" href="/admin/ranking/export?{{ qs }}">⬇️ Excel</a>
     <button class="btn" onclick="window.print()">🖨 Chop etish</button>
   </div>
@@ -38,7 +40,7 @@
   {% set ns = namespace(grade=None) %}
   {% for r in rows %}
     {% if by_grade and r.participant.grade_id != ns.grade %}{% set ns.grade = r.participant.grade_id %}
-      <tr><td colspan="20" style="background:#eef2fb"><b>{{ r.participant.grade.name }}-sinf</b> <span class="muted small">({{ r.group_size }} ishtirokchi)</span></td></tr>{% endif %}
+      <tr><td colspan="20" style="background:#eef2fb"><b>{{ r.participant.grade.name|sinf }}</b> <span class="muted small">({{ r.group_size }} ishtirokchi)</span></td></tr>{% endif %}
     <tr class="place-{{ r.place }}">
       <td><b>{{ '🥇' if r.place == 1 else ('🥈' if r.place == 2 else ('🥉' if r.place == 3 else '')) }} {{ r.place }}</b></td>
       <td>{{ r.participant.code }}</td>
@@ -71,9 +73,32 @@
   </form>
   <div class="card">
     <h2>Natijalarni yetkazish</h2>
-    <p class="muted small">Natijalar e'lon qilingach, har bir o'quvchiga uning bali va o'rni bot orqali yuboriladi.</p>
-    <form method="post" action="/admin/broadcasts/quick/results" class="inline" data-confirm="Barcha ishtirokchilarga natijalar yuborilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id if round }}"><button class="btn" {% if not setting('results_published') %}disabled title="Avval natijalarni e'lon qiling"{% endif %}>📨 Natijalarni botga yuborish</button></form>
-    <form method="post" action="/admin/broadcasts/quick/certificates" class="inline" data-confirm="Sertifikatlar yuborilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" {% if not (setting('results_published') and setting('certificates_enabled')) %}disabled title="Natijalar e'lon qilingan va sertifikatlar yoqilgan bo'lishi kerak"{% endif %}>🎓 Sertifikatlarni yuborish</button></form>
+    <p class="muted small">Ball kiritish, skaner va tekshirish paytida o'quvchilarga <b>hech narsa bormaydi</b>. Har bir qadam alohida, siz tasdiqlaganingizda yuboriladi.</p>
+
+    <div class="flow-step mb-s"><span class="dot">1</span><div style="flex:1">
+      <b>Natijalar (ball va o'rin)</b> — {{ send.results or 0 }} ta o'quvchiga.
+      {% if setting('results_published') %}<span class="badge ok">e'lon qilingan</span>{% endif %}
+      <form method="post" action="/admin/broadcasts/quick/results" class="mt-s"
+            data-confirm="{{ send.results or 0 }} ta o'quvchiga natijalari yuboriladi va botda «Natijalarim» ochiladi. {{ 'Natijalar qayta yuboriladi. ' if setting('results_published') else '' }}Tasdiqlaysizmi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id if round }}">
+        <button class="btn primary" {% if not send.results %}disabled title="Natija kiritilmagan"{% endif %}>📨 {{ "Natijalarni qayta yuborish" if setting('results_published') else "Natijalarni e'lon qilish va yuborish" }}</button>
+      </form></div></div>
+
+    <div class="flow-step mb-s"><span class="dot">2</span><div style="flex:1">
+      <b>Tekshirilgan titullar</b> (ixtiyoriy, keyin) — {{ send.sheets or 0 }} ta o'quvchida{% if send.sheets %}, yuborilmagan: <b>{{ send.sheets_unsent }}</b>{% endif %}.
+      <div class="help">To'g'ri javoblar yashil, xatolar qizil belgilangan rasm. Natijalar e'lon qilingandan keyin ochiladi.</div>
+      <form method="post" action="/admin/broadcasts/quick/sheets" class="filters mt-s"
+            data-confirm="Tekshirilgan titul rasmlari o'quvchilarga yuboriladi. Tasdiqlaysizmi?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="round_id" value="{{ round.id if round }}">
+        <div><label class="small">Fan</label><select name="subject_id"><option value="">Barcha fanlar</option>
+          {% for sj in send.sheet_subjects or [] %}<option value="{{ sj.id }}">{{ sj.name }}</option>{% endfor %}</select></div>
+        <label class="check"><input type="checkbox" name="only_unsent" value="1" checked> Faqat hali olmaganlarga</label>
+        <div class="btns"><button class="btn" {% if not (setting('results_published') and send.sheets) %}disabled title="{{ 'Avval natijalarni yuboring' if not setting('results_published') else 'Tekshirilgan titul yo\'q' }}"{% endif %}>📄 Titullarni yuborish</button></div>
+      </form>
+      <div class="help">Bitta o'quvchiga — «📝 Titul va skaner» → «Ishlar» ro'yxatidan.</div></div></div>
+
+    <div class="flow-step mb-s"><span class="dot">3</span><div style="flex:1"><b>Sertifikatlar</b> (agar yoqilgan bo'lsa)<div class="mt-s">
+    <form method="post" action="/admin/broadcasts/quick/certificates" class="inline" data-confirm="Sertifikatlar yuborilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" {% if not (setting('results_published') and setting('certificates_enabled')) %}disabled title="Natijalar e'lon qilingan va sertifikatlar yoqilgan bo'lishi kerak"{% endif %}>🎓 Sertifikatlarni yuborish</button></form></div></div></div>
   </div>
 </div>
 {% endif %}

@@ -41,10 +41,10 @@
 <div class="card mb">
   <div class="small muted mb">1) Sinfni tanlang &nbsp;→&nbsp; 2) shu sinf savollarining to'g'ri javoblarini belgilang &nbsp;→&nbsp; 3) Saqlang. Keyin keyingi sinfga o'ting.</div>
   <div class="gtabs" id="gtabs">
-    {% for g in grades %}<a href="/admin/omr/key/{{ subject.id }}?round_id={{ round.id }}&grade_id={{ g.id }}" class="{{ 'on' if g.id == grade.id }}">{{ g.name }}-sinf<span class="st">{{ '✅' if done[g.id] else '— yo\'q' }}</span></a>{% endfor %}
+    {% for g in grades %}<a href="/admin/omr/key/{{ subject.id }}?round_id={{ round.id }}&grade_id={{ g.id }}" class="{{ 'on' if g.id == grade.id }}">{{ g.name|sinf }}<span class="st">{{ '✅' if done[g.id] else '— yo\'q' }}</span></a>{% endfor %}
   </div>
-  <div class="grade-title">Hozir: <span>{{ grade.name }}-SINF</span> kaliti</div>
-  <div class="small muted">Bu kalit faqat <b>{{ grade.name }}-sinf</b> o'quvchilarining titullariga ishlatiladi{% if scanned %} · shu sinfdan <b>{{ scanned }}</b> ta skanerlangan ish saqlangach qayta hisoblanadi{% endif %}.</div>
+  <div class="grade-title">Hozir: <span>{{ (grade.name|sinf)|upper }}</span> kaliti</div>
+  <div class="small muted">Bu kalit faqat <b>{{ grade.name|sinf }}</b> o'quvchilarining titullariga ishlatiladi{% if scanned %} · shu sinfdan <b>{{ scanned }}</b> ta skanerlangan ish saqlangach qayta hisoblanadi{% endif %}.</div>
   {% if copy_from %}
   <div class="btns mt-s"><select id="copysel" style="max-width:260px"><option value="">— boshqa sinf kalitidan nusxa olish —</option>
     {% for name in copy_from %}<option value="{{ name }}">{{ name }} kaliti</option>{% endfor %}</select>
@@ -77,7 +77,7 @@
   </details>
   <div class="kbar">
     <span id="kstat" class="small"></span>
-    <button class="btn primary" id="ksave">💾 Saqlash<span class="t"> ({{ grade.name }}-sinf)</span></button>
+    <button class="btn primary" id="ksave">💾 Saqlash<span class="t"> ({{ grade.name|sinf }})</span></button>
     <button class="btn" type="button" id="kclear" title="Shu variantni tozalash">🧹<span class="t"> Tozalash</span></button>
   </div>
 </form>

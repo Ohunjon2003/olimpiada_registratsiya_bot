@@ -6,7 +6,7 @@
 <div class="dz-head">
   <div class="dz-title"><h1>{{ tpl.name }}</h1>
     <span class="badge {{ 'ok' if tpl.is_active else '' }}">{{ 'faol' if tpl.is_active else 'nofaol' }}</span>
-    <span class="badge blue">{{ 'Ruxsatnoma' if tpl.kind == 'pass' else 'Sertifikat' }}</span>
+    <span class="badge blue">{{ {'pass': 'Ruxsatnoma', 'voucher': 'Voucher'}.get(tpl.kind, 'Sertifikat') }}</span>
   </div>
   <div class="btns">
     <span id="dz-status" class="muted small"></span>
@@ -29,7 +29,7 @@
   <button type="button" data-act="add-rect" title="To'rtburchak">▭</button>
   <button type="button" data-act="add-ellipse" title="Doira / oval">◯</button>
   <button type="button" data-act="add-line" title="Chiziq">━</button>
-  {% if tpl.kind == 'pass' %}<button type="button" data-act="add-qr" title="Davomat QR kodi (nazoratchi telefonda skaner qiladi)">▦ QR</button>{% endif %}
+  {% if tpl.kind in ('pass', 'voucher') %}<button type="button" data-act="add-qr" title="{{ 'Davomat QR kodi (nazoratchi telefonda skaner qiladi)' if tpl.kind == 'pass' else 'Tekshirish QR kodi (haqiqiyligini ko\'rsatadi)' }}">▦ QR</button>{% endif %}
   <span class="dz-sep"></span>
   <button type="button" data-act="undo" title="Orqaga (Ctrl+Z)">↶</button>
   <button type="button" data-act="redo" title="Oldinga (Ctrl+Y)">↷</button>
@@ -69,7 +69,7 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="field"><label>Nomi</label><input type="text" name="name" value="{{ tpl.name }}" required maxlength="128"></div>
         <label class="check field"><input type="checkbox" name="is_active" {% if tpl.is_active %}checked{% endif %}> <b>Faol</b> (o'quvchilarga beriladi)</label>
-        {% if tpl.kind != 'pass' %}
+        {% if tpl.kind == 'certificate' %}
         <div class="field"><label>Kimlarga beriladi</label><select name="rule" id="rule">
           {% for k, v in rules.items() %}<option value="{{ k }}" {% if tpl.rule == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
           <div class="help">Sovrindorlar «🏅 O'rinlar va mukofotlar» sahifasidagi qoidaga ko'ra aniqlanadi (nechta o'rin, minimal foiz).</div></div>
@@ -79,6 +79,8 @@
         <div class="field" data-scope="subject"><label>Fan</label><select name="subject_id"><option value="">Barcha fanlar</option>{% for s in subjects %}<option value="{{ s.id }}" {% if tpl.subject_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
         <div class="field" data-scope="block"><label>Blok</label><select name="block_id"><option value="">Barcha bloklar</option>{% for b in blocks %}<option value="{{ b.id }}" {% if tpl.block_id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
         <div class="field"><label>Tur</label><select name="round_id"><option value="">Joriy tur</option>{% for r in rounds %}<option value="{{ r.id }}" {% if tpl.round_id == r.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+        {% elif tpl.kind == 'voucher' %}
+        <div class="help mb">Voucherlar «🎟 Voucherlar» sahifasidan beriladi va yuboriladi (qiymat, matn, kimga — o'sha yerda). Faol shablonlardan birinchisi ishlatiladi.</div>
         {% else %}
         <div class="help mb">Ruxsatnoma «🪑 Joylashtirish» sahifasidan yuboriladi. Faol shablonlardan birinchisi ishlatiladi.</div>
         {% endif %}
@@ -86,7 +88,7 @@
       </form>
       <div class="field mt"><label>Haqiqiy o'quvchi bilan ko'rish (ID)</label>
         <div class="btns"><input type="text" id="dz-pid" placeholder="Masalan: 0017" style="max-width:120px"><button class="btn sm" type="button" data-act="preview-pid">👁 Ko'rish</button></div>
-        <div class="help">{{ "Ruxsatnoma: o'quvchiga joy biriktirilgan bo'lishi kerak." if tpl.kind == 'pass' else "Natijasi va shu shablonga mos o'rni bo'lsa, haqiqiy ma'lumoti chiqadi." }}</div></div>
+        <div class="help">{{ {'pass': "Ruxsatnoma: o'quvchiga joy biriktirilgan bo'lishi kerak.", 'voucher': "Voucher: o'quvchiga voucher berilgan bo'lishi kerak."}.get(tpl.kind, "Natijasi va shu shablonga mos o'rni bo'lsa, haqiqiy ma'lumoti chiqadi.") }}</div></div>
       <hr class="dz-hr">
       <form method="post" action="/admin/certificates/{{ tpl.id }}/duplicate" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">⧉ Nusxa olish</button></form>
       <form method="post" action="/admin/certificates/{{ tpl.id }}/delete" class="inline" data-confirm="Shablon o'chirilsinmi?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">🗑 O'chirish</button></form>

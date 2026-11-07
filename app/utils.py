@@ -228,3 +228,21 @@ def fmt_num(x: float) -> str:
     except (TypeError, ValueError):
         return str(x)
     return str(int(x)) if x == int(x) else f"{x:g}"
+
+
+_GRADE_SUFFIX = re.compile(r"[\s\-–]*(sinf|синф)[a-zа-яʼ'‘’]*\s*$", re.IGNORECASE)
+
+
+def grade_num(name: str) -> str:
+    """Sinf nomidan «-sinf» qo'shimchasini olib tashlaydi: «2-sinf» → «2», «7» → «7»."""
+    name = (name or "").strip()
+    return _GRADE_SUFFIX.sub("", name).strip() or name
+
+
+def grade_label(name: str) -> str:
+    """Har doim bitta «-sinf»: «2» → «2-sinf», «2-sinf» → «2-sinf» (avval «2-sinf-sinf» chiqardi)."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    suffix = "-синф" if re.search(r"[а-яА-ЯўқғҳЎҚҒҲ]", name) else "-sinf"
+    return grade_num(name) + suffix

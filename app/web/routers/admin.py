@@ -224,8 +224,8 @@ async def settings_save(request: Request, user: User = Depends(require_admin),
     form = await request.form()
     values, errors = {}, []
     for key, (kind, default, label) in st.DEFAULTS.items():
-        if key.startswith("_") or key in st.TEXT_PAGE_KEYS:
-            continue  # bu kalitlar «Bot matnlari» sahifasida saqlanadi
+        if key not in st.GENERAL_FORM_KEYS:
+            continue  # boshqa sahifalarda saqlanadigan kalitlarga tegilmaydi
         raw = form.get(key)
         if kind == "bool":
             values[key] = raw in ("on", "1")
@@ -243,6 +243,9 @@ async def settings_save(request: Request, user: User = Depends(require_admin),
                 errors.append(f"«{label}» sanasi noto'g'ri")
         else:
             values[key] = str(raw or "").replace("\r\n", "\n").strip()
+    # Natijalarni bu yerda faqat YASHIRISH mumkin; ochish — «Natijalarni e'lon qilish va yuborish» tugmasi
+    if values.get("results_published") and not st.get("results_published"):
+        values["results_published"] = False
     if not values.get("olympiad_name"):
         errors.append("Olimpiada nomi bo'sh bo'lmasin")
     s, e = values.get("registration_start"), values.get("registration_end")
@@ -275,6 +278,10 @@ async def toggle_setting(key: str, request: Request, user: User = Depends(requir
     if key not in ("results_published", "certificates_enabled", "judges_see_names"):
         raise HTTPException(404)
     new = not st.get(key)
+    if key == "results_published" and new:
+        # Natijalar faqat «📨 Natijalarni e'lon qilish va yuborish» bilan ochiladi
+        flash(request, "Natijalarni ochish uchun «🏅 Reyting» → «📨 Natijalarni e'lon qilish va yuborish»", "error")
+        return RedirectResponse("/admin/ranking", 303)
     await st.set_many(session, {key: new})
     audit.log(session, user, "update", "settings", key, f"{key}={new}", ip=client_ip(request))
     await session.commit()

@@ -576,3 +576,39 @@ class SheetScan(Base):
     subject: Mapped["Subject"] = relationship(lazy="selectin")
 
     __table_args__ = (Index("ix_scan_lookup", "subject_id", "round_id", "participant_id"),)
+
+
+class Voucher(Base):
+    """Qatnashgani uchun beriladigan voucher (pul qiymatli): raqami, QR orqali tekshirish, bir marta ishlatiladi.
+
+    serial — «V-0127-K3F9QZ»: o'quvchi ID + 6 ta tasodifiy belgi (taxmin qilib topib bo'lmaydi).
+    QR → https://<sayt>/v/<serial> — istalgan telefon kamerasi bilan haqiqiyligi tekshiriladi.
+    """
+    __tablename__ = "vouchers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id", ondelete="CASCADE"))
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"))
+    serial: Mapped[str] = mapped_column(String(32), unique=True)
+    amount: Mapped[int] = mapped_column(Integer, default=0)          # so'm
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    issued_by: Mapped[str] = mapped_column(String(64), default="")
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)   # botga yuborilgan
+    redeemed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # ishlatilgan
+    redeemed_by: Mapped[str] = mapped_column(String(64), default="")
+    redeem_note: Mapped[str] = mapped_column(String(255), default="")
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # bekor qilingan
+    cancel_reason: Mapped[str] = mapped_column(String(255), default="")
+
+    participant: Mapped["Participant"] = relationship(lazy="selectin")
+    round: Mapped["Round"] = relationship(lazy="selectin")
+
+    __table_args__ = (UniqueConstraint("participant_id", "round_id", name="uq_voucher_participant_round"),)
+
+    @property
+    def status(self) -> str:
+        """active | redeemed | cancelled"""
+        if self.cancelled_at:
+            return "cancelled"
+        if self.redeemed_at:
+            return "redeemed"
+        return "active"

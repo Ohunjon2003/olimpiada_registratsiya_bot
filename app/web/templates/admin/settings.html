@@ -29,7 +29,11 @@
     <label class="check field"><input type="checkbox" name="judges_see_names" {% if setting('judges_see_names') %}checked{% endif %}> Hakamlar ishtirokchi ism-familiyasini ko'rsin <span class="muted">(o'chirilsa faqat ID raqami ko'rinadi — xolislik uchun)</span></label>
     <label class="check field"><input type="checkbox" name="judges_attendance" {% if setting('judges_attendance') %}checked{% endif %}> Hakamlar ham davomatni («Keldi / Kelmadi») belgilay olsin <span class="muted">(davomat sahifasida ism-familiya ko'rinadi)</span></label>
     <label class="check field"><input type="checkbox" name="ranking_by_grade" {% if setting('ranking_by_grade') %}checked{% endif %}> O'quvchilarga o'rin sinf kesimida beriladi <span class="muted">(o'chirilsa — umumiy reyting)</span></label>
-    <label class="check field"><input type="checkbox" name="results_published" {% if setting('results_published') %}checked{% endif %}> Natijalar e'lon qilingan — o'quvchilar botda «Natijalarim»ni ko'ra oladi</label>
+    {% if setting('results_published') %}
+    <label class="check field"><input type="checkbox" name="results_published" checked> Natijalar e'lon qilingan — o'quvchilar botda «Natijalarim»ni ko'radi <span class="muted">(belgini olib saqlasangiz — yashiriladi)</span></label>
+    {% else %}
+    <div class="field small muted">🔒 Natijalar yopiq: ball kiritish va skaner paytida o'quvchilarga hech narsa bormaydi. Ochish va yuborish — <a href="/admin/ranking">«🏅 Reyting» → «📨 Natijalarni e'lon qilish va yuborish»</a>.</div>
+    {% endif %}
     <label class="check field"><input type="checkbox" name="certificates_enabled" {% if setting('certificates_enabled') %}checked{% endif %}> Sertifikat/diplomlar yoqilgan — o'quvchi botdan yuklab oladi (natijalar e'lon qilingan bo'lsa)</label>
   </div>
 

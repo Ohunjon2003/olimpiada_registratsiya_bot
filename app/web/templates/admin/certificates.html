@@ -63,6 +63,25 @@
   <a class="tpl-card tpl-add" href="/admin/certificates/new?kind=pass">＋ Yangi ruxsatnoma shabloni</a>
 </div>
 
+<h2>🎟 Voucher</h2>
+<p class="muted small">Qatnashganlarga beriladigan pul qiymatli voucher (ism, qiymat, raqam va tekshirish QR kodi bilan). Faol bo'lgan birinchi shablon ishlatiladi. Berish va yuborish — <a href="/admin/vouchers">«🎟 Voucherlar»</a> sahifasida.</p>
+<div class="tpl-grid mb">
+  {% for t in vouchers %}
+  <div class="tpl-card {{ '' if t.is_active else 'inactive' }}">
+    <a href="/admin/certificates/{{ t.id }}" class="tpl-thumb"><img loading="lazy" src="/admin/certificates/{{ t.id }}/preview.png?w=520&v={{ t.design_json|length }}{{ t.width }}" alt=""></a>
+    <div class="tpl-body">
+      <div class="tpl-title"><a href="/admin/certificates/{{ t.id }}"><b>{{ t.name }}</b></a>
+        {% if t.is_active %}<span class="badge ok">faol</span>{% else %}<span class="badge">nofaol</span>{% endif %}</div>
+      <div class="btns mt-s">
+        <a class="btn sm primary" href="/admin/certificates/{{ t.id }}">✏️ Dizayn</a>
+        <form method="post" action="/admin/certificates/{{ t.id }}/duplicate" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">⧉ Nusxa</button></form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <a class="tpl-card tpl-add" href="/admin/certificates/new?kind=voucher">＋ Yangi voucher shabloni</a>
+</div>
+
 <div class="card" id="fonts">
   <h2>🔤 O'z shriftingiz</h2>
   <p class="muted small">Dizaynerda 15 ta tayyor shrift bor (lotin va kirill harflari bilan). Boshqa shrift kerak bo'lsa, .ttf yoki .otf faylini yuklang.

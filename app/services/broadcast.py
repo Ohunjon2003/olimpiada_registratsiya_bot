@@ -5,6 +5,8 @@ Turlari:
   * results      — har bir ishtirokchiga o'z natijasi
   * certificates — har bir ishtirokchiga o'z sertifikatlari (rasm + PDF, sovrindorga o'rni bilan tabrik)
   * passes       — ruxsatnoma (olimpiada kuni: sana, vaqt, bino, xona, o'rin)
+  * sheets       — tekshirilgan titul rasmlari
+  * vouchers     — qatnashganlarga voucher
 
 Telegram cheklovi: ~30 xabar/sekund. Biz sekundiga BROADCAST_RATE (standart 20)
 ta yuboramiz. Server qayta ishga tushsa, yuborish to'xtagan joyidan davom etadi.
@@ -14,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Optional
 
 from aiogram.exceptions import (TelegramBadRequest, TelegramForbiddenError,
                                 TelegramRetryAfter)
@@ -128,13 +129,104 @@ async def send_sheets(bot, session, p: Participant, b: Broadcast) -> str:
     return status
 
 
-async def run(broadcast_id: int) -> None:
-    """Bitta xabarni yuborish (bir vaqtda faqat bittasi ishlaydi)."""
-    from ..bot import loader
+class _Rate:
+    """Umumiy tezlik chegarasi: sekundiga ko'pi bilan `rate` ta Telegram so'rovi (barcha ishchilar uchun)."""
+
+    def __init__(self, rate: float):
+        self.gap = 1.0 / max(rate, 1.0)
+        self.next = 0.0
+        self.lock = asyncio.Lock()
+
+    async def wait(self, n: int = 1) -> None:
+        async with self.lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            start = max(now, self.next)
+            self.next = start + self.gap * n
+        if start > now:
+            await asyncio.sleep(start - now)
+
+
+async def _deliver(bot, snap, pid: int, templates, rate: _Rate, photo: dict) -> str:
+    """Bitta o'quvchiga yuborish — O'Z sessiyasida (bir nechta ishchi parallel ishlaydi).
+    Natija: 'ok' | 'blocked' | 'fail' | 'skip'."""
     from ..bot.formatters import results_text
     from ..bot.handlers.registration import split_text
     from ..bot import stickers
     from ..bot.texts import t
+
+    async with session_scope() as s:
+        p = await s.get(Participant, pid)
+        if p is None:
+            return "skip"
+        status = "fail"
+        if snap.kind == "message":
+            text = by_lang(snap.text, snap.text_cyr, p.lang)
+            await rate.wait()
+            if snap.photo_path:
+                async def send(p=p, text=text):
+                    msg = await bot.send_photo(p.telegram_id, photo.get("id") or FSInputFile(snap.photo_path),
+                                               caption=text[:1024] or None, parse_mode=None)
+                    if msg.photo and not photo.get("id"):
+                        photo["id"] = msg.photo[-1].file_id      # keyingilarga qayta yuklamaslik
+                status = await _send_with_retry(send)
+            else:
+                status = await _send_with_retry(lambda: bot.send_message(
+                    p.telegram_id, text, parse_mode=None, disable_web_page_preview=True))
+        elif snap.kind == "results":
+            text = await results_text(s, p)
+            if text:
+                prefix = t("results_ready", p.lang) + "\n\n"
+                await rate.wait()
+                await stickers.send(bot, p.telegram_id, "sticker_results")
+                status = "ok"
+                for part in split_text(prefix + text):
+                    await rate.wait()
+                    r = await _send_with_retry(lambda part=part: bot.send_message(p.telegram_id, part))
+                    if r != "ok":
+                        status = r
+                        break
+                if status == "ok" and snap.with_sheets:          # tekshirilgan titul rasmlari ham
+                    await rate.wait()
+                    r = await send_sheets(bot, s, p, snap)
+                    if r in ("blocked",):
+                        status = r
+            else:
+                status = "skip"
+        elif snap.kind == "certificates":
+            items = await certs.certificates_for(s, p, templates)
+            status = "skip" if not items else "ok"
+            for it in items[:10]:
+                await rate.wait(2)                               # har sertifikat — 2 ta xabar
+                status = await send_certificate(bot, p, it)
+                if status != "ok":
+                    break
+        elif snap.kind == "sheets":
+            await rate.wait(2)
+            status = await send_sheets(bot, s, p, snap)
+        elif snap.kind == "passes":
+            from . import seating
+            await rate.wait(2)
+            status = await seating.send_pass(bot, s, p)
+        elif snap.kind == "vouchers":
+            from . import vouchers
+            await rate.wait(2)
+            status = await vouchers.send(bot, s, p)
+        if status == "blocked":
+            p.bot_blocked = True
+        await s.commit()          # pass_sent_at / sent_at / bot_blocked — darhol saqlanadi
+        return status
+
+
+async def run(broadcast_id: int) -> None:
+    """Bitta xabarni yuborish (bir vaqtda faqat bittasi ishlaydi).
+
+    Tezlik: bir nechta o'quvchiga PARALLEL yuboriladi (BROADCAST_WORKERS, standart 6) — rasm/PDF yuklash
+    tarmoqda kutadi, shu vaqtda boshqalariga ham yuboriladi. Umumiy chegara — sekundiga BROADCAST_RATE so'rov.
+    Har guruhdan keyin joyi saqlanadi: server qayta yonsa, davom etadi.
+    """
+    from types import SimpleNamespace
+    from ..bot import loader
 
     bot = loader.bot
     if bot is None:
@@ -148,92 +240,52 @@ async def run(broadcast_id: int) -> None:
                 b.total = await count_recipients(b)
             b.status = "sending"
             await s.commit()
+            flt = json.loads(b.filters_json or "{}")
+            snap = SimpleNamespace(kind=b.kind, text=b.text, text_cyr=b.text_cyr, photo_path=b.photo_path,
+                                   filters_json=b.filters_json, round_id=b.round_id,
+                                   with_sheets=flt.get("with_sheets") == "1")
 
-        photo_id: Optional[str] = None
-        delay = 1.0 / max(config.BROADCAST_RATE, 1.0)
+        rate = _Rate(config.BROADCAST_RATE)
+        workers = max(1, min(int(getattr(config, "BROADCAST_WORKERS", 6)), 16))
+        photo: dict = {}
         async with session_scope() as s:
-            templates = await certs.active_templates(s) if b.kind == "certificates" else []
-            if b.kind == "passes" and not st.get("passes_published"):
+            templates = await certs.active_templates(s) if snap.kind == "certificates" else []
+            if snap.kind == "passes" and not st.get("passes_published"):
                 await st.set_many(s, {"passes_published": True})  # botda «🎫 Ruxsatnoma» tugmasi chiqadi
-        batch = 50
+            if snap.kind == "vouchers" and not st.get("vouchers_published"):
+                await st.set_many(s, {"vouchers_published": True})  # botda «🎟 Voucher» tugmasi chiqadi
+        batch = workers * 2
+        sem = asyncio.Semaphore(workers)
+
+        async def one(pid: int) -> str:
+            async with sem:
+                try:
+                    return await _deliver(bot, snap, pid, templates, rate, photo)
+                except Exception:
+                    log.exception("Xabar #%s: o'quvchi %s ga yuborishda xato", broadcast_id, pid)
+                    return "fail"
+
         while True:
             async with session_scope() as s:
                 b = await s.get(Broadcast, broadcast_id)
                 if b.status != "sending":  # bekor qilingan
                     return
-                people = (await s.execute(recipients_query(b).where(Participant.id > b.cursor_id)
-                                          .order_by(Participant.id).limit(batch))).scalars().all()
-                if not people:
+                ids = (await s.execute(recipients_query(b).with_only_columns(Participant.id)
+                                       .where(Participant.id > b.cursor_id)
+                                       .order_by(Participant.id).limit(batch))).scalars().all()
+                if not ids:
                     b.status = "done"
                     b.finished_at = now_utc()
                     await s.commit()
                     log.info("Xabar #%s yakunlandi: %s yuborildi, %s xato", b.id, b.sent, b.failed)
                     return
-
-                for p in people:
-                    status = "fail"
-                    if b.kind == "message":
-                        text = by_lang(b.text, b.text_cyr, p.lang)
-                        if b.photo_path:
-                            async def send(p=p, text=text):
-                                nonlocal photo_id
-                                msg = await bot.send_photo(
-                                    p.telegram_id, photo_id or FSInputFile(b.photo_path),
-                                    caption=text[:1024] or None, parse_mode=None)
-                                if msg.photo and not photo_id:
-                                    photo_id = msg.photo[-1].file_id  # keyingilarga qayta yuklamaslik
-                            status = await _send_with_retry(send)
-                        else:
-                            status = await _send_with_retry(
-                                lambda p=p, text=text: bot.send_message(
-                                    p.telegram_id, text, parse_mode=None, disable_web_page_preview=True))
-                    elif b.kind == "results":
-                        text = await results_text(s, p)
-                        if text:
-                            prefix = t("results_ready", p.lang) + "\n\n"
-                            if await stickers.send(bot, p.telegram_id, "sticker_results"):
-                                await asyncio.sleep(delay)  # Telegram tezlik chegarasi
-                            parts = split_text(prefix + text)
-                            ok = True
-                            for part in parts:
-                                r = await _send_with_retry(lambda p=p, part=part: bot.send_message(p.telegram_id, part))
-                                if r != "ok":
-                                    status, ok = r, False
-                                    break
-                                await asyncio.sleep(delay)
-                            if ok:
-                                status = "ok"
-                        else:
-                            status = "skip"
-                    elif b.kind == "certificates":
-                        items = await certs.certificates_for(s, p, templates)
-                        if not items:
-                            status = "skip"
-                        for it in items[:10]:
-                            status = await send_certificate(bot, p, it)
-                            if status != "ok":
-                                break
-                            await asyncio.sleep(delay * 2)  # har sertifikat — 2 ta xabar
-                    elif b.kind == "sheets":
-                        status = await send_sheets(bot, s, p, b)
-                        await asyncio.sleep(delay * 2)
-                    elif b.kind == "passes":
-                        from . import seating
-                        status = await seating.send_pass(bot, s, p)
-                        await asyncio.sleep(delay * 2)
-
-                    if status == "ok":
-                        b.sent += 1
-                    elif status == "blocked":
-                        b.failed += 1
-                        p.bot_blocked = True
-                    elif status == "fail":
-                        b.failed += 1
-                    b.cursor_id = p.id
-                    # Har ishtirokchidan keyin saqlaymiz: yozish qulfi uzoq ushlanmaydi
-                    # (hakamlar ball kiritayotganda kutib qolmasin) va uzilsa joyidan davom etadi
-                    await s.commit()
-                    await asyncio.sleep(delay)
+            results = await asyncio.gather(*(one(pid) for pid in ids))
+            async with session_scope() as s:
+                b = await s.get(Broadcast, broadcast_id)
+                b.sent += sum(1 for r in results if r == "ok")
+                b.failed += sum(1 for r in results if r in ("blocked", "fail"))
+                b.cursor_id = max(ids)
+                await s.commit()
 
 
 async def scheduler_loop() -> None:

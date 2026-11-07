@@ -71,7 +71,7 @@
     {% for g in subj_grades[s.id] %}
       {% set ok = namespace(n=0) %}{% for v in range(s.variants) %}{% if keys.get((s.id, g.id, v)) %}{% set ok.n = ok.n + 1 %}{% endif %}{% endfor %}
       <a href="/admin/omr/key/{{ s.id }}?round_id={{ round.id }}&grade_id={{ g.id }}" class="gk {{ 'ok' if ok.n == s.variants else ('part' if ok.n else 'no') }}">
-        {{ g.name }}-sinf {{ '✅' if ok.n == s.variants else ('◐' if ok.n else '— yo\'q') }}</a>
+        {{ g.name|sinf }} {{ '✅' if ok.n == s.variants else ('◐' if ok.n else '— yo\'q') }}</a>
     {% else %}<span class="muted small">Bu fanni hali hech kim tanlamagan</span>{% endfor %}
     </div>
     <div class="help">Kalitni olimpiadadan keyin kiritish ham mumkin — skanerlangan ishlar o'zi hisoblanadi. Har o'quvchining ishi faqat <b>o'z sinfi</b> kaliti bilan tekshiriladi.</div>
@@ -94,7 +94,7 @@
       <div class="field"><label>Smena</label><select name="session_id"><option value="">Hammasi</option>
         {% for e in exam_sessions %}<option value="{{ e.id }}">{{ e.name }} · {{ e.day.strftime('%d.%m') }} {{ e.start_time }}</option>{% endfor %}</select></div>
       <div class="field"><label>Sinf</label><select name="grade_id"><option value="">Barcha sinflar</option>
-        {% for g in all_grades %}<option value="{{ g.id }}">{{ g.name }}-sinf</option>{% endfor %}</select></div>
+        {% for g in all_grades %}<option value="{{ g.id }}">{{ g.name|sinf }}</option>{% endfor %}</select></div>
       <div class="field"><label>Tartib</label><select name="order">
         <option value="seat">Xona va o'rin bo'yicha (nazoratchiga xona dastasi)</option>
         <option value="grade">Avval sinf, keyin xona va o'rin (har sinf dastasi alohida)</option></select></div>
@@ -150,7 +150,7 @@
   <div>
     <div class="btns" style="justify-content:space-between"><b>№{{ sc.id }} · {{ sc.subject.name }}</b><span class="badge warn">{{ reasons.get(sc.reason, sc.reason) }}</span></div>
     <table class="small mt-s"><tbody>
-      <tr><td class="muted">Titul egasi (kod)</td><td><b>ID {{ qp.code }}</b> — {{ qp.full_name }}, {{ qp.school.name }}, {{ qp.grade.name }}-sinf</td></tr>
+      <tr><td class="muted">Titul egasi (kod)</td><td><b>ID {{ qp.code }}</b> — {{ qp.full_name }}, {{ qp.school.name }}, {{ qp.grade.name|sinf }}</td></tr>
       <tr><td class="muted">O'quvchi belgilagan ID</td><td><b>{{ sc.id_marked.replace('_', '·') }}</b>{% if mp %} — {{ mp.full_name }}, {{ mp.school.name }}{% elif sc.id_marked.isdigit() %} — <span class="err-text">bunday o'quvchi yo'q</span>{% endif %}</td></tr>
       <tr><td class="muted">Natija (taxminiy)</td><td>{% if sc.correct is not none %}{{ sc.correct }}/{{ sc.answers|length }} ({{ sc.percent|num }}%){% else %}kalit yo'q{% endif %}</td></tr>
       <tr><td class="muted">Skaner</td><td>{{ sc.scanned_by }}, {{ sc.scanned_at|dt }}</td></tr>

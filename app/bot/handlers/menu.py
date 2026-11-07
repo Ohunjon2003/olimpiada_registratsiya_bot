@@ -181,6 +181,29 @@ async def my_pass(msg: Message, state: FSMContext) -> None:
         await msg.answer(t("error", lang))
 
 
+@tail.message(StateFilter(None), Btn("btn_voucher"))
+async def my_voucher(msg: Message, state: FSMContext) -> None:
+    """Qatnashgani uchun voucher (rasm + PDF, QR bilan)."""
+    from ...services import vouchers
+    async with session_scope() as s:
+        p = await psvc.by_telegram(s, msg.from_user.id)
+        if p is None:
+            await cmd_start(msg, state)
+            return
+        lang = p.lang
+        if p.status != "active":
+            await msg.answer(t("disqualified", lang))
+            return
+        v = await vouchers.for_participant(s, p)
+        if v is None or v.status != "active" or await vouchers.template(s) is None:
+            await msg.answer(t("voucher_none", lang))
+            return
+        result = await vouchers.send(msg.bot, s, p)
+        await s.commit()
+    if result not in ("ok", "blocked"):
+        await msg.answer(t("error", lang))
+
+
 @tail.message(StateFilter(None), Btn("btn_lang"))
 async def change_lang(msg: Message) -> None:
     await msg.answer(t("choose_lang"), reply_markup=kb.lang_kb())

@@ -3,9 +3,9 @@
 {% block crumbs %}<a href="/admin/certificates">Sertifikatlar</a> / Yangi shablon{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>{{ 'Yangi ruxsatnoma shabloni' if kind == 'pass' else 'Yangi sertifikat yoki diplom' }}</h1>
+  <div><h1>{{ {'pass': 'Yangi ruxsatnoma shabloni', 'voucher': 'Yangi voucher shabloni'}.get(kind, 'Yangi sertifikat yoki diplom') }}</h1>
     <div class="muted">Tayyor dizaynni tanlang — keyin ranglar, matnlar, rasmlarni istalgancha o'zgartirasiz.
-      {% if kind != 'pass' %}Canva'da tayyorlagan rasmingiz bo'lsa — «Bo'sh» shablonni tanlab, uni fon qilib yuklang.{% endif %}</div></div>
+      {% if kind == 'certificate' %}Canva'da tayyorlagan rasmingiz bo'lsa — «Bo'sh» shablonni tanlab, uni fon qilib yuklang.{% endif %}</div></div>
 </div>
 <div class="tpl-grid">
   {% for key, title in presets %}

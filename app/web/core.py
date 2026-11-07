@@ -16,11 +16,12 @@ from ..db import get_session
 from ..models import User
 from ..security import new_token
 from ..services import settings as st
-from ..utils import fmt_dt, fmt_num, format_phone, to_local_input
+from ..utils import fmt_dt, fmt_num, format_phone, grade_label, to_local_input
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.filters["dt"] = fmt_dt
+templates.env.filters["sinf"] = grade_label
 templates.env.filters["num"] = fmt_num
 templates.env.filters["phone"] = format_phone
 templates.env.filters["dtinput"] = to_local_input

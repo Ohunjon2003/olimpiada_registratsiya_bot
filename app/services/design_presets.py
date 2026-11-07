@@ -203,6 +203,47 @@ def pass_default() -> dict:
     return {"page": _page("A5P"), "bg": {"type": "color", "color": "#ffffff"}, "els": _named(els)}
 
 
+# ---------------------------------------------------------------------------
+# Voucher (qatnashgani uchun, pul qiymatli)
+# ---------------------------------------------------------------------------
+def voucher_default() -> dict:
+    navy, gold, ink, muted = "#0b3b5c", "#c9a227", "#0f172a", "#64748b"
+    qw = 20.0                                    # QR kengligi (sahifa %): A5 albomda ≈ 42 mm
+    qh = qw * 210 / 148                          # kvadrat (A5 albom: 210×148 mm)
+    els = [
+        R(0, 0, 100, 15, fill=navy, name="Sarlavha fon"),
+        R(0, 15, 100, 0.8, fill=gold),
+        T("VOUCHER", 4, 2.5, 40, 10, 5.0, "#ffffff", "oswald", True, "left", ls=0.18, name="Sarlavha"),
+        T("{olympiad}", 44, 3.5, 52, 8, 1.55, "#dbe7f3", "montserrat", True, "right", name="Olimpiada nomi"),
+        T("Ushbu voucher egasi:", 4, 20, 60, 5, 1.45, muted, "montserrat", align="left"),
+        T("{full_name}", 4, 25, 61, 10, 3.5, navy, "montserrat", True, "left", wrap=False, name="Familiya Ism"),
+        T("{school}, {grade}-sinf o'quvchisi", 4, 35.5, 61, 5, 1.45, "#334155", "montserrat", align="left"),
+        L(4, 43, 18, gold, 0.35),
+        T("{reason}", 4, 45, 61, 10, 1.8, ink, "montserrat", True, "left", name="Nima uchun"),
+        R(4, 57, 61, 23, fill="#fdf6e3", stroke=gold, sw=0.3, radius=8, name="Qiymat fon"),
+        T("QIYMATI", 7, 59, 55, 5, 1.25, "#92400e", "montserrat", True, "left", ls=0.12),
+        T("{amount} {currency}", 7, 63.5, 55, 10.5, 4.6, "#7c2d12", "oswald", True, "left", wrap=False, name="Qiymat"),
+        T("({amount_words} {currency})", 7, 73.5, 55, 5, 1.3, "#92400e", "montserrat", align="left", name="Qiymat so'zda"),
+        T("{terms}", 4, 82.5, 61, 8, 1.05, muted, "montserrat", align="left", name="Shartlar"),
+        T("Berilgan: {date} · Amal qilish muddati: {valid_until}", 4, 91.5, 61, 4.5, 1.1, "#475569", "montserrat",
+          align="left", name="Sana"),
+        R(69, 19, 0.25, 77, fill="#cbd5e1", name="Ajratuvchi chiziq"),
+        T("TEKSHIRISH", 72, 18.5, 25, 4.5, 1.2, muted, "montserrat", True, ls=0.12),
+        {"type": "qr", "x": 74.5, "y": 23.5, "w": qw, "h": qh, "color": "#000000", "name": "Tekshirish QR kodi"},
+        T("№ {voucher_no}", 71.5, 23.5 + qh + 1.5, 26, 5, 1.45, navy, "montserrat", True, wrap=False, name="Raqami"),
+        T("ID {code}", 71.5, 23.5 + qh + 7, 26, 4.5, 1.2, muted, "montserrat"),
+        T("Telefon kamerasi bilan skaner qiling — haqiqiyligi ko'rinadi", 71.5, 23.5 + qh + 12, 26, 9, 1.0, muted,
+          "montserrat"),
+        R(73, 87, 23, 7.5, fill=navy, radius=100, name="Belgi fon"),
+        T("BIR MARTALIK", 73, 87, 23, 7.5, 1.2, "#ffffff", "montserrat", True, ls=0.08),
+    ]
+    return {"page": {"preset": "A5L", "dpi": 200}, "bg": {"type": "color", "color": "#fffdf7"}, "els": _named(els)}
+
+
+VOUCHER_PRESETS: dict[str, tuple[str, Callable[[], dict]]] = {
+    "voucher_default": ("Voucher (A5 albom)", voucher_default),
+}
+
 CERT_PRESETS: dict[str, tuple[str, Callable[[], dict]]] = {
     "classic_gold": ("Klassik oltin", classic_gold),
     "modern_blue": ("Zamonaviy ko'k", modern_blue),
@@ -220,6 +261,6 @@ PASS_PRESETS: dict[str, tuple[str, Callable[[], dict]]] = {
 
 def build(key: str) -> dict:
     """Tayyor shablonni tekshirilgan dizayn ko'rinishida qaytaradi."""
-    presets = {**CERT_PRESETS, **PASS_PRESETS}
+    presets = {**CERT_PRESETS, **PASS_PRESETS, **VOUCHER_PRESETS}
     _, fn = presets.get(key) or presets["classic_gold"]
     return dz.clean_design(fn())

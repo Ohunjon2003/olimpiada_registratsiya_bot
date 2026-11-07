@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import config
 from ..models import Block, CertificateTemplate, Participant, Round
-from ..utils import by_lang, fmt_num, lat2cyr
+from ..utils import by_lang, fmt_num, grade_num, lat2cyr
 from . import design as dz
 from . import design_presets as presets
 from . import ranking
@@ -72,6 +72,17 @@ PASS_PH: dict[str, tuple[str, str]] = {
     "seat_text": ("O'rin to'liq («14-o'rin · 3-qator, 2-parta, chap»)", "14-o'rin · 3-qator, 2-parta, chap"),
 }
 
+VOUCHER_PH: dict[str, tuple[str, str]] = {
+    **COMMON_PH,
+    "amount": ("Qiymati («2 000 000»)", "2 000 000"),
+    "amount_words": ("Qiymati so'z bilan", "ikki million"),
+    "currency": ("Valyuta («so'm»)", "so'm"),
+    "reason": ("Nima uchun berilgan", "Hokim olimpiadasida qatnashgani uchun"),
+    "terms": ("Shartlar", "Voucher faqat egasi tomonidan bir marta ishlatiladi."),
+    "voucher_no": ("Voucher raqami", "V-0017-K3F9QZ"),
+    "valid_until": ("Amal qilish muddati", "31.12.2027"),
+}
+
 ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII", 9: "IX", 10: "X"}
 
 RULES = {
@@ -92,9 +103,25 @@ AWARD_TEXT_DEFAULTS = {
 }
 
 
+def placeholders(kind: str) -> dict:
+    return {"pass": PASS_PH, "voucher": VOUCHER_PH}.get(kind, CERT_PH)
+
+
+def presets_for(kind: str) -> dict:
+    return {"pass": presets.PASS_PRESETS, "voucher": presets.VOUCHER_PRESETS}.get(kind, presets.CERT_PRESETS)
+
+
 def sample_context(kind: str = "certificate") -> dict:
-    ph = PASS_PH if kind == "pass" else CERT_PH
+    ph = placeholders(kind)
     ctx = {k: v[1] for k, v in ph.items()}
+    if kind == "voucher":
+        from . import vouchers
+        amount = int(st.get("voucher_amount") or 0)
+        vu = vouchers.valid_until()
+        ctx.update({"amount": vouchers.fmt_amount(amount), "amount_words": vouchers.amount_words(amount),
+                    "reason": st.get("voucher_reason") or ctx["reason"], "terms": st.get("voucher_terms") or ctx["terms"],
+                    "valid_until": vu.strftime("%d.%m.%Y") if vu else "muddatsiz",
+                    "qr": vouchers.verify_url("NAMUNA")})
     if kind == "pass":
         from . import passqr
         ctx["qr"] = passqr.make(0, 0)       # namuna QR (davomatda «noto'g'ri o'quvchi» deb chiqadi)
@@ -188,6 +215,8 @@ def load_design(tpl: CertificateTemplate) -> dict:
             pass
     if tpl.kind == "pass":
         return presets.build("pass_default")
+    if tpl.kind == "voucher":
+        return presets.build("voucher_default")
     return dz.from_legacy(load_fields(tpl), tpl.background_path, tpl.width or 1754, tpl.height or 1240)
 
 
@@ -200,8 +229,8 @@ def save_design(tpl: CertificateTemplate, design: dict) -> None:
 def render_template(tpl: CertificateTemplate, ctx: dict) -> Image.Image:
     design = load_design(tpl)
     img = dz.render(design, ctx)
-    if tpl.kind == "pass" and ctx.get("qr") and not has_qr(design):
-        img = add_qr_strip(img, ctx)        # eski shablonda QR joyi yo'q — pastiga QR qatori qo'shiladi
+    if tpl.kind in ("pass", "voucher") and ctx.get("qr") and not has_qr(design):
+        img = add_qr_strip(img, ctx, tpl.kind)   # shablonda QR joyi yo'q — pastiga QR qatori qo'shiladi
     return img
 
 
@@ -209,7 +238,7 @@ def has_qr(design: dict) -> bool:
     return any(e.get("type") == "qr" and not e.get("hidden") for e in design.get("els", []))
 
 
-def add_qr_strip(img: Image.Image, ctx: dict) -> Image.Image:
+def add_qr_strip(img: Image.Image, ctx: dict, kind: str = "pass") -> Image.Image:
     """Ruxsatnoma pastiga davomat QR kodi qatori (dizaynga tegmasdan, hech narsani yopmaydi)."""
     from PIL import ImageDraw
     from . import passqr
@@ -231,6 +260,10 @@ def add_qr_strip(img: Image.Image, ctx: dict) -> Image.Image:
     x, y = pad, H + pad + int(q * 0.06)
     lines = ["Kirishda nazoratchiga ko'rsating:", "telefon ekranida yoki qog'ozda.", "QR kodni buklamang va chizmang."]
     title = "DAVOMAT QR KODI"
+    if kind == "voucher":
+        lines = ["Telefon kamerasi bilan skaner qiling —", "voucher haqiqiyligi va holati ko'rinadi.",
+                 f"№ {ctx.get('voucher_no', '')}"]
+        title = "TEKSHIRISH QR KODI"
     if ctx.get("lang") == "cyr":
         from ..utils import lat2cyr
         lines, title = [lat2cyr(x) for x in lines], lat2cyr(title)
@@ -257,7 +290,7 @@ def build_context(p: Participant, title: str, row: ranking.RankRow, round_: Roun
     return {
         "full_name": p.full_name, "first_name": p.first_name, "last_name": p.last_name,
         "school": by_lang(p.school.name, p.school.name_cyr, lang) if p.school else "",
-        "grade": by_lang(p.grade.name, p.grade.name_cyr, lang) if p.grade else "",
+        "grade": grade_num(by_lang(p.grade.name, p.grade.name_cyr, lang)) if p.grade else "",
         "subject": title, "place": str(row.place), "place_roman": ROMAN.get(row.place, str(row.place)),
         "place_text": place_text(row.place, lang), "award": award_text(prize, lang),
         "score": fmt_num(row.score), "max_score": fmt_num(row.max_score), "percent": fmt_num(row.percent),
@@ -347,7 +380,7 @@ def caption_for(item: CertItem, lang: str) -> str:
 
 def new_template(kind: str, preset: str, name: str = "") -> CertificateTemplate:
     """Tayyor shablondan yangi shablon (bazaga qo'shilmagan)."""
-    plist = presets.PASS_PRESETS if kind == "pass" else presets.CERT_PRESETS
+    plist = presets_for(kind)
     if preset not in plist:
         preset = next(iter(plist))
     tpl = CertificateTemplate(name=name or plist[preset][0], kind=kind, is_active=False,

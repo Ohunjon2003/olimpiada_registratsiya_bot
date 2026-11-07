@@ -51,6 +51,8 @@ class Config:
 
     # --- Telegram limitlari: sekundiga yuboriladigan xabarlar soni ---
     BROADCAST_RATE: float = float(os.getenv("BROADCAST_RATE", "20"))
+    # Bir vaqtda nechta o'quvchiga parallel yuboriladi (rasm/PDF yuklash tarmoqda kutadi)
+    BROADCAST_WORKERS: int = int(os.getenv("BROADCAST_WORKERS", "6"))
 
     @classmethod
     def ensure_dirs(cls) -> None:

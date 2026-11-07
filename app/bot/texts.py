@@ -167,6 +167,13 @@ LAT: dict[str, str] = {
     "pass_changed": "⚠️ <b>Diqqat! O'rningiz o'zgardi.</b> Yangi ruxsatnoma quyida 👇",
     "pass_map": "🗺 Xaritada ko'rish",
 
+    # --- Voucher ---
+    "btn_voucher": "🎟 Voucher",
+    "voucher_caption": "🎟 <b>Voucher — {amount} so'm</b>\n\n👤 {name}\n📝 {reason}\n🔢 Raqami: <b>{serial}</b>\n"
+                       "⏳ Amal qilish muddati: {valid}\n\n✅ Haqiqiyligi QR kod orqali tekshiriladi. "
+                       "Voucher bir marta ishlatiladi — uni boshqalarga bermang. 🍀",
+    "voucher_none": "🎟 Sizga voucher berilmagan. Voucher olimpiadada qatnashgan o'quvchilarga beriladi.",
+
     # --- E'tiroz (apellyatsiya) ---
     "btn_appeal": "⚖️ E'tiroz",
     "appeal_closed": "⏳ Hozir e'tiroz qabul qilinmayapti.",
@@ -290,6 +297,10 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         ("pass_caption", "Ruxsatnoma izohi"), ("pass_changed", "O'rin o'zgargach"),
         ("pass_not_ready", "Ruxsatnoma hali tayyor emas"), ("pass_none", "O'rin biriktirilmagan"),
         ("pass_map", "Xarita tugmasi matni"),
+    ]),
+    ("🎟 Voucher", [
+        ("btn_voucher", "Tugma: voucher (menyuda, voucherlar yuborilgach)"),
+        ("voucher_caption", "Voucher izohi"), ("voucher_none", "Voucher berilmagan"),
     ]),
     ("⚖️ E'tirozlar", [
         ("btn_appeal", "Tugma: e'tiroz (menyuda, e'tirozlar ochiq bo'lsa)"),

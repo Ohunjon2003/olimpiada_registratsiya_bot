@@ -49,6 +49,13 @@ async def _get(session, tid: int) -> CertificateTemplate:
     return tpl
 
 
+_KINDS = ("certificate", "pass", "voucher")
+
+
+def _kind(v) -> str:
+    return v if v in _KINDS else "certificate"
+
+
 # ---------------------------------------------------------------------------
 # Ro'yxat va yangi shablon
 # ---------------------------------------------------------------------------
@@ -59,15 +66,16 @@ async def list_view(request: Request, user: User = Depends(require_admin),
         CertificateTemplate.position, CertificateTemplate.id))).scalars().all()
     subjects, blocks, rounds = await _lookups(session)
     return render(request, "admin/certificates.html", {
-        "certs": [t for t in items if t.kind != "pass"], "passes": [t for t in items if t.kind == "pass"],
+        "certs": [t for t in items if t.kind == "certificate"], "passes": [t for t in items if t.kind == "pass"],
+        "vouchers": [t for t in items if t.kind == "voucher"],
         "subjects": {s.id: s for s in subjects}, "blocks": {b.id: b for b in blocks},
         "rounds": {r.id: r for r in rounds}, "rules": certs.RULES})
 
 
 @router.get("/new")
 async def new_page(request: Request, kind: str = "certificate", user: User = Depends(require_admin)):
-    kind = "pass" if kind == "pass" else "certificate"
-    plist = presets.PASS_PRESETS if kind == "pass" else presets.CERT_PRESETS
+    kind = _kind(kind)
+    plist = certs.presets_for(kind)
     return render(request, "admin/certificate_new.html", {
         "kind": kind, "presets": [(k, v[0]) for k, v in plist.items()]})
 
@@ -77,10 +85,10 @@ _preset_png: dict[str, bytes] = {}
 
 @router.get("/preset/{key}.png")
 async def preset_png(key: str, user: User = Depends(require_admin)):
-    if key not in {**presets.CERT_PRESETS, **presets.PASS_PRESETS}:
+    if key not in {**presets.CERT_PRESETS, **presets.PASS_PRESETS, **presets.VOUCHER_PRESETS}:
         raise HTTPException(404)
     if key not in _preset_png:
-        kind = "pass" if key in presets.PASS_PRESETS else "certificate"
+        kind = "pass" if key in presets.PASS_PRESETS else ("voucher" if key in presets.VOUCHER_PRESETS else "certificate")
         _preset_png[key] = await asyncio.to_thread(
             lambda: dz.to_png(dz.render(presets.build(key), certs.sample_context(kind)), 520))
     return Response(_preset_png[key], media_type="image/png", headers={"Cache-Control": "max-age=3600"})
@@ -89,7 +97,7 @@ async def preset_png(key: str, user: User = Depends(require_admin)):
 @router.get("/preset/{key}.json")
 async def preset_json(key: str, user: User = Depends(require_admin)):
     """Muharrirda «Tayyor dizayn» tanlanganda."""
-    if key not in {**presets.CERT_PRESETS, **presets.PASS_PRESETS}:
+    if key not in {**presets.CERT_PRESETS, **presets.PASS_PRESETS, **presets.VOUCHER_PRESETS}:
         raise HTTPException(404)
     return JSONResponse(presets.build(key))
 
@@ -98,7 +106,7 @@ async def preset_json(key: str, user: User = Depends(require_admin)):
 async def create(request: Request, user: User = Depends(require_admin),
                  session: AsyncSession = Depends(get_session)):
     form = await request.form()
-    kind = "pass" if form.get("kind") == "pass" else "certificate"
+    kind = _kind(form.get("kind"))
     tpl = certs.new_template(kind, str(form.get("preset") or ""))
     tpl.position = ((await session.execute(select(func.max(CertificateTemplate.position)))).scalar() or 0) + 1
     session.add(tpl)
@@ -133,9 +141,9 @@ async def edit(tid: int, request: Request, user: User = Depends(require_admin),
                session: AsyncSession = Depends(get_session)):
     tpl = await _get(session, tid)
     subjects, blocks, rounds = await _lookups(session)
-    ph = certs.PASS_PH if tpl.kind == "pass" else certs.CERT_PH
+    ph = certs.placeholders(tpl.kind)
     sample = certs.sample_context(tpl.kind)
-    plist = presets.PASS_PRESETS if tpl.kind == "pass" else presets.CERT_PRESETS
+    plist = certs.presets_for(tpl.kind)
     people = (await session.execute(select(Participant).where(Participant.status == "active")
                                     .order_by(Participant.id).limit(1))).scalars().first()
     return render(request, "admin/certificate_edit.html", {
@@ -341,6 +349,11 @@ async def _context_for(session, tpl: CertificateTemplate, code: str | None) -> d
                 ctx = await seating.pass_context(session, p)
                 if ctx:
                     return ctx
+            elif tpl.kind == "voucher":
+                from ...services import vouchers
+                v = await vouchers.for_participant(session, p)
+                if v:
+                    return vouchers.build_context(v)
             else:
                 for it in await certs.certificates_for(session, p, [tpl]):
                     return it.context
@@ -382,11 +395,11 @@ async def sample_pdf(tid: int, code: str | None = None, user: User = Depends(req
 async def delete(tid: int, request: Request, user: User = Depends(require_admin),
                  session: AsyncSession = Depends(get_session)):
     tpl = await _get(session, tid)
-    if tpl.kind == "pass":
+    if tpl.kind in ("pass", "voucher"):
         n = (await session.execute(select(func.count()).select_from(CertificateTemplate)
-                                   .where(CertificateTemplate.kind == "pass"))).scalar_one()
+                                   .where(CertificateTemplate.kind == tpl.kind))).scalar_one()
         if n <= 1:
-            flash(request, "Yagona ruxsatnoma shablonini o'chirib bo'lmaydi — uni o'zgartiring.", "error")
+            flash(request, "Yagona ruxsatnoma/voucher shablonini o'chirib bo'lmaydi — uni o'zgartiring.", "error")
             return RedirectResponse(f"/admin/certificates/{tid}", 303)
     used = dz.assets_in(certs.load_design(tpl))
     if tpl.background_path:
